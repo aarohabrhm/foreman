@@ -5,3 +5,60 @@ object_relationships:
   - name: org
     using:
       foreign_key_constraint_on: org_id
+
+# --- Layer 1 ---------------------------------------------------------------
+# The table behind the database-event trigger. owner/editor can insert a row
+# (which starts a run with no button click); viewer can only read.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &watched_columns
+        - id
+        - org_id
+        - label
+        - payload
+        - created_by
+        - created_at
+      filter: &watched_is_owner
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: owner
+  - role: editor
+    permission:
+      columns: *watched_columns
+      filter: &watched_is_editor
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: editor
+  - role: viewer
+    permission:
+      columns: *watched_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: viewer
+insert_permissions:
+  - role: owner
+    permission:
+      check: *watched_is_owner
+      set:
+        created_by: x-hasura-user-id
+      columns: &watched_writable
+        - org_id
+        - label
+        - payload
+  - role: editor
+    permission:
+      check: *watched_is_editor
+      set:
+        created_by: x-hasura-user-id
+      columns: *watched_writable

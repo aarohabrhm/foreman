@@ -10,3 +10,47 @@ object_relationships:
           schema: public
         column_mapping:
           org_id: id
+
+# --- Layer 1 ---------------------------------------------------------------
+# The required aggregation, exposed as a view. A view has no foreign keys, so the
+# relationship back to organizations is declared manually — and the permission
+# filter then scopes it through org_members exactly like every base table.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &usage_columns
+        - org_id
+        - quota_allowed
+        - quota_used
+        - quota_period_start
+        - runs_remaining
+        - runs_this_period
+        - runs_succeeded_this_period
+        - avg_run_seconds_this_period
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: owner
+  - role: editor
+    permission:
+      columns: *usage_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: editor
+  - role: viewer
+    permission:
+      columns: *usage_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: viewer

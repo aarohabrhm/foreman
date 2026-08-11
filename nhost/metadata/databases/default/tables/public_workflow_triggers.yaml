@@ -5,3 +5,103 @@ object_relationships:
   - name: workflow
     using:
       foreign_key_constraint_on: workflow_id
+
+# --- Layer 1 ---------------------------------------------------------------
+# `token_hash` is never selectable by anyone: the plaintext webhook token is
+# shown once, at creation, by the saveWorkflow handler.
+#
+# As on workflow_steps, the `trigger_type: {_neq: webhook}` clause on the
+# editor's writes is a backstop; assertCanConfigureTrigger in lib/auth/layer2.ts
+# is the enforcement point.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &trigger_columns
+        - id
+        - workflow_id
+        - trigger_type
+        - config
+        - is_enabled
+        - created_at
+        - updated_at
+      filter: &trigger_is_owner
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: owner
+  - role: editor
+    permission:
+      columns: *trigger_columns
+      filter: &trigger_is_editor
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: editor
+  - role: viewer
+    permission:
+      columns: *trigger_columns
+      filter:
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: viewer
+insert_permissions:
+  - role: owner
+    permission:
+      check: *trigger_is_owner
+      columns: &trigger_writable
+        - workflow_id
+        - trigger_type
+        - config
+        - is_enabled
+  - role: editor
+    permission:
+      check:
+        _and:
+          - *trigger_is_editor
+          - trigger_type:
+              _neq: webhook
+      columns: *trigger_writable
+update_permissions:
+  - role: owner
+    permission:
+      columns:
+        - config
+        - is_enabled
+      filter: *trigger_is_owner
+      check: *trigger_is_owner
+  - role: editor
+    permission:
+      columns:
+        - config
+        - is_enabled
+      filter:
+        _and:
+          - *trigger_is_editor
+          - trigger_type:
+              _neq: webhook
+      check:
+        _and:
+          - *trigger_is_editor
+          - trigger_type:
+              _neq: webhook
+delete_permissions:
+  - role: owner
+    permission:
+      filter: *trigger_is_owner
+  - role: editor
+    permission:
+      filter:
+        _and:
+          - *trigger_is_editor
+          - trigger_type:
+              _neq: webhook

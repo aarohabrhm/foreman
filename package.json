@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "check:permissions": "node scripts/check-permissions.mjs",
     "db:push": "node --env-file=.env.local scripts/db-push.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed.mjs",
     "test:cross-org": "node --env-file=.env.local scripts/test-cross-org.mjs"

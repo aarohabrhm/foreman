@@ -27,3 +27,84 @@ array_relationships:
         table:
           name: workflow_runs
           schema: public
+
+# --- Layer 1 ---------------------------------------------------------------
+# owner: full control. editor: create and edit, but not delete. viewer: read.
+# Every rule reaches org_members through the `org` relationship, so the same
+# role in a different org matches zero rows.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &workflow_columns
+        - id
+        - org_id
+        - name
+        - description
+        - created_by
+        - created_at
+        - updated_at
+      filter: &workflow_is_owner
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: owner
+      allow_aggregations: true
+  - role: editor
+    permission:
+      columns: *workflow_columns
+      filter: &workflow_is_editor
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: editor
+      allow_aggregations: true
+  - role: viewer
+    permission:
+      columns: *workflow_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: viewer
+      allow_aggregations: true
+insert_permissions:
+  - role: owner
+    permission:
+      check: *workflow_is_owner
+      set:
+        created_by: x-hasura-user-id
+      columns: &workflow_writable
+        - org_id
+        - name
+        - description
+  - role: editor
+    permission:
+      check: *workflow_is_editor
+      set:
+        created_by: x-hasura-user-id
+      columns: *workflow_writable
+update_permissions:
+  - role: owner
+    permission:
+      columns:
+        - name
+        - description
+      filter: *workflow_is_owner
+      check: *workflow_is_owner
+  - role: editor
+    permission:
+      columns:
+        - name
+        - description
+      filter: *workflow_is_editor
+      check: *workflow_is_editor
+delete_permissions:
+  - role: owner
+    permission:
+      filter: *workflow_is_owner

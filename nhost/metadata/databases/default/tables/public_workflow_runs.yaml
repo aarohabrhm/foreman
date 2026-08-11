@@ -16,3 +16,73 @@ array_relationships:
         table:
           name: step_runs
           schema: public
+
+# --- Layer 1 ---------------------------------------------------------------
+# `viewer` gets select and nothing else — that is the database-level expression
+# of "viewer ... cannot trigger a run". No role may UPDATE a run: status
+# transitions are written exclusively by the engine through the admin client, so
+# a client cannot fake progress or un-pause a run by mutating the row directly.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &run_columns
+        - id
+        - workflow_id
+        - org_id
+        - status
+        - trigger_type
+        - triggered_by
+        - input
+        - context
+        - error
+        - started_at
+        - finished_at
+        - created_at
+        - updated_at
+      filter: &run_is_owner
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: owner
+      allow_aggregations: true
+  - role: editor
+    permission:
+      columns: *run_columns
+      filter: &run_is_editor
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: editor
+      allow_aggregations: true
+  - role: viewer
+    permission:
+      columns: *run_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: viewer
+      allow_aggregations: true
+insert_permissions:
+  - role: owner
+    permission:
+      check: *run_is_owner
+      set:
+        triggered_by: x-hasura-user-id
+      columns: &run_writable
+        - workflow_id
+        - org_id
+        - trigger_type
+        - input
+  - role: editor
+    permission:
+      check: *run_is_editor
+      set:
+        triggered_by: x-hasura-user-id
+      columns: *run_writable

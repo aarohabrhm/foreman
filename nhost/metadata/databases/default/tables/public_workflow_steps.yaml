@@ -5,3 +5,102 @@ object_relationships:
   - name: workflow
     using:
       foreign_key_constraint_on: workflow_id
+
+# --- Layer 1 ---------------------------------------------------------------
+# Scoping reaches org_members through workflow -> org.
+#
+# The `type: {_nin: [db_write, notify]}` clause on the editor's insert/update is
+# a DEFENCE-IN-DEPTH BACKSTOP only. Layer 2 is the enforcement point for
+# step-type restrictions and lives in lib/auth/layer2.ts
+# (assertCanCreateStepType), which the saveWorkflow Action calls before writing.
+# The clause is here because these tables also accept direct GraphQL mutations,
+# and a hole an editor could reach by hand-writing a mutation would be a real
+# one. See docs/WRITEUP.md.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &step_columns
+        - id
+        - workflow_id
+        - position
+        - name
+        - type
+        - config
+        - branch_key
+        - created_at
+        - updated_at
+      filter: &step_is_owner
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: owner
+  - role: editor
+    permission:
+      columns: *step_columns
+      filter: &step_is_editor
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: editor
+  - role: viewer
+    permission:
+      columns: *step_columns
+      filter:
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: viewer
+insert_permissions:
+  - role: owner
+    permission:
+      check: *step_is_owner
+      columns: &step_writable
+        - workflow_id
+        - position
+        - name
+        - type
+        - config
+        - branch_key
+  - role: editor
+    permission:
+      check:
+        _and:
+          - *step_is_editor
+          - type:
+              _nin:
+                - db_write
+                - notify
+      columns: *step_writable
+update_permissions:
+  - role: owner
+    permission:
+      columns: *step_writable
+      filter: *step_is_owner
+      check: *step_is_owner
+  - role: editor
+    permission:
+      columns: *step_writable
+      filter: *step_is_editor
+      check:
+        _and:
+          - *step_is_editor
+          - type:
+              _nin:
+                - db_write
+                - notify
+delete_permissions:
+  - role: owner
+    permission:
+      filter: *step_is_owner
+  - role: editor
+    permission:
+      filter: *step_is_editor

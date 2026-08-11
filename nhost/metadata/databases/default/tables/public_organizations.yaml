@@ -32,3 +32,71 @@ array_relationships:
         table:
           name: workflow_runs
           schema: public
+
+# --- Layer 1 ---------------------------------------------------------------
+# `user` is nhost's default role and exists purely to bootstrap: a fresh session
+# must be able to discover which orgs it belongs to before it knows what role it
+# holds in any of them. It can see nothing else anywhere in the schema.
+#
+# owner/editor/viewer each scope to organizations where the caller holds THAT
+# role. Presenting `x-hasura-role: owner` is not a grant: the filter still has to
+# find an org_members row for this user with role = owner.
+insert_permissions:
+  - role: user
+    permission:
+      check: {}
+      columns:
+        - name
+select_permissions:
+  - role: user
+    permission:
+      columns: &org_columns
+        - id
+        - name
+        - quota_allowed
+        - quota_used
+        - quota_period_start
+        - created_at
+        - updated_at
+      filter:
+        members:
+          user_id:
+            _eq: X-Hasura-User-Id
+  - role: owner
+    permission:
+      columns: *org_columns
+      filter: &org_is_owner
+        members:
+          user_id:
+            _eq: X-Hasura-User-Id
+          role:
+            _eq: owner
+      allow_aggregations: true
+  - role: editor
+    permission:
+      columns: *org_columns
+      filter:
+        members:
+          user_id:
+            _eq: X-Hasura-User-Id
+          role:
+            _eq: editor
+      allow_aggregations: true
+  - role: viewer
+    permission:
+      columns: *org_columns
+      filter:
+        members:
+          user_id:
+            _eq: X-Hasura-User-Id
+          role:
+            _eq: viewer
+      allow_aggregations: true
+update_permissions:
+  - role: owner
+    permission:
+      columns:
+        - name
+        - quota_allowed
+      filter: *org_is_owner
+      check: *org_is_owner

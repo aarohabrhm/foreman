@@ -8,3 +8,45 @@ object_relationships:
   - name: run
     using:
       foreign_key_constraint_on: workflow_run_id
+
+# --- Layer 1 ---------------------------------------------------------------
+# Written only by the engine (db_write steps), readable by any member of the
+# owning org in the role they hold there.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &result_columns
+        - id
+        - org_id
+        - workflow_run_id
+        - step_run_id
+        - label
+        - payload
+        - created_at
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: owner
+  - role: editor
+    permission:
+      columns: *result_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: editor
+  - role: viewer
+    permission:
+      columns: *result_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: viewer

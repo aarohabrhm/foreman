@@ -5,3 +5,73 @@ object_relationships:
   - name: org
     using:
       foreign_key_constraint_on: org_id
+
+# --- Layer 1 ---------------------------------------------------------------
+# Only `owner` may write membership; `editor` and `viewer` can read the roster of
+# their own orgs but cannot change it ("editor ... cannot manage members").
+select_permissions:
+  - role: user
+    permission:
+      # Bootstrap: my own membership rows, so the app can build the org switcher.
+      columns: &member_columns
+        - id
+        - org_id
+        - user_id
+        - role
+        - invited_email
+        - created_at
+      filter:
+        user_id:
+          _eq: X-Hasura-User-Id
+  - role: owner
+    permission:
+      columns: *member_columns
+      filter: &member_via_owner
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: owner
+  - role: editor
+    permission:
+      columns: *member_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: editor
+  - role: viewer
+    permission:
+      columns: *member_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: viewer
+insert_permissions:
+  - role: owner
+    permission:
+      # The check resolves the org relationship of the row being inserted, so an
+      # owner can only add members to orgs they own.
+      check: *member_via_owner
+      columns:
+        - org_id
+        - user_id
+        - role
+        - invited_email
+update_permissions:
+  - role: owner
+    permission:
+      columns:
+        - role
+      filter: *member_via_owner
+      check: *member_via_owner
+delete_permissions:
+  - role: owner
+    permission:
+      filter: *member_via_owner

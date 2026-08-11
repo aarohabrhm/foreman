@@ -8,3 +8,64 @@ object_relationships:
   - name: step
     using:
       foreign_key_constraint_on: workflow_step_id
+
+# --- Layer 1 ---------------------------------------------------------------
+# Read-only for every role — this is the table the live subscription watches.
+# Nobody can write it over GraphQL: approving a gate has to go through the
+# approveStep Action so the Layer 2 role check (lib/auth/layer2.ts) runs and the
+# run is actually resumed. Granting update here would let an editor stamp
+# approved_by on a step without the run ever continuing.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &step_run_columns
+        - id
+        - workflow_run_id
+        - workflow_step_id
+        - position
+        - step_name
+        - step_type
+        - status
+        - input
+        - output
+        - error
+        - attempt_count
+        - approved_by
+        - approved_at
+        - started_at
+        - finished_at
+        - created_at
+        - updated_at
+      filter:
+        run:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: owner
+      allow_aggregations: true
+  - role: editor
+    permission:
+      columns: *step_run_columns
+      filter:
+        run:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: editor
+      allow_aggregations: true
+  - role: viewer
+    permission:
+      columns: *step_run_columns
+      filter:
+        run:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: viewer
+      allow_aggregations: true
