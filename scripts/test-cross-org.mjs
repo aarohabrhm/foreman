@@ -16,34 +16,70 @@ import { fileURLToPath } from "node:url";
 import { createClient } from "graphql-ws";
 
 import { signIn, userGraphql } from "./lib/auth.mjs";
-import { adminGraphql } from "./lib/hasura.mjs";
+import { adminGraphql, metadataApi } from "./lib/hasura.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const results = [];
 
 /**
- * Checks that go through a Hasura Action are only meaningful once the Actions
- * are actually in the schema (they need ACTION_BASE_URL on the Hasura side).
- * Until then they are refused before any permission check runs, which proves
- * nothing — so they are reported as inconclusive rather than scored as passes.
- * scripts/verify-acceptance.mjs covers the same denials meanwhile, by calling
- * the handlers directly with the payload Hasura would send.
+ * A check that goes through a Hasura Action only proves something about
+ * permissions if the request actually reached the permission check. Two ways it
+ * might not, both of which would otherwise look like a pass:
  *
- * A missing field on a *table* type is different: it means the role has no
- * permission on that table at all, which is the permission system working.
+ *   1. the Actions are not in the schema at all (ACTION_BASE_URL unset), or
+ *   2. they are, but Hasura cannot reach the handler (the app is not deployed,
+ *      or is deployed wrongly), so the mutation fails on the webhook call.
+ *
+ * Either way the caller was refused for the wrong reason, so it is reported as
+ * inconclusive. scripts/verify-acceptance.mjs covers the same denials meanwhile
+ * by calling the handlers directly.
+ *
+ * Note that a *missing field* is not automatically a gap: once the Actions are
+ * in the schema, "no mutations exist" for `viewer` means the Action's own
+ * permissions exclude that role, which is the enforcement working.
  */
-const actionMissing = (detail) =>
-  /field '(triggerWorkflowRun|approveStep|saveWorkflow|startWorkflowViaWebhook)' not found/i.test(
-    detail ?? "",
-  ) || /no mutations exist/i.test(detail ?? "");
+let actionsInSchema = false;
+
+const classify = (detail) => {
+  const text = detail ?? "";
+  if (/webhook/i.test(text)) return "handler-unreachable";
+  if (
+    !actionsInSchema &&
+    (/field '(triggerWorkflowRun|approveStep|saveWorkflow|startWorkflowViaWebhook)' not found/i.test(
+      text,
+    ) ||
+      /no mutations exist/i.test(text))
+  ) {
+    return "action-missing";
+  }
+  return null;
+};
 
 const record = (name, passed, detail = "", { viaAction = false } = {}) => {
-  const inconclusive = passed && viaAction && actionMissing(detail);
-  results.push({ name, passed, detail, inconclusive });
-  const label = inconclusive ? "SKIP" : passed ? "PASS" : "FAIL";
+  const gap = passed && viaAction ? classify(detail) : null;
+  results.push({ name, passed, detail, inconclusive: Boolean(gap), gap });
+  const label = gap ? "SKIP" : passed ? "PASS" : "FAIL";
   console.log(`  ${label}  ${name}${detail ? ` — ${detail}` : ""}`);
 };
+
+/** Are the Actions actually part of the GraphQL schema right now? */
+async function detectActions() {
+  try {
+    const state = await metadataApi("get_inconsistent_metadata", {});
+    const inconsistentNames = new Set(
+      (state?.inconsistent_objects ?? []).map((entry) => entry.name ?? ""),
+    );
+    const metadata = await metadataApi("export_metadata", {});
+    const defined = (metadata.actions ?? []).map((action) => action.name);
+    return (
+      defined.includes("triggerWorkflowRun") &&
+      ![...inconsistentNames].some((name) => name.includes("triggerWorkflowRun"))
+    );
+  } catch {
+    return false;
+  }
+}
 
 const isDenied = (response) =>
   Array.isArray(response.errors) && response.errors.length > 0
@@ -120,6 +156,7 @@ async function subscribeOnce(accessToken, role, query, variables, timeoutMs = 12
 async function main() {
   const seed = loadSeed();
   const targets = await loadOrgATargets(seed);
+  actionsInSchema = await detectActions();
 
   console.log(`Org A: ${seed.orgA.name} (${seed.orgA.id})`);
   console.log(`Org B: ${seed.orgB.name} (${seed.orgB.id})`);
@@ -307,13 +344,25 @@ async function main() {
     `\n${results.length - failed.length - skipped.length}/${results.length} checks passed` +
       (skipped.length ? `, ${skipped.length} inconclusive.` : "."),
   );
-  if (skipped.length) {
+  const missing = skipped.filter((entry) => entry.gap === "action-missing");
+  const unreachable = skipped.filter((entry) => entry.gap === "handler-unreachable");
+
+  if (missing.length) {
     console.log(
-      "\nINCONCLUSIVE — the Action is not in the GraphQL schema, so these were\n" +
+      "\nINCONCLUSIVE — the Actions are not in the GraphQL schema, so these were\n" +
         "refused before any permission check ran. Set ACTION_BASE_URL in the nhost\n" +
         "dashboard, re-run `npm run db:push`, then re-run this test:",
     );
-    for (const entry of skipped) console.log(`  · ${entry.name}`);
+    for (const entry of missing) console.log(`  · ${entry.name}`);
+  }
+  if (unreachable.length) {
+    console.log(
+      "\nINCONCLUSIVE — Hasura reached ACTION_BASE_URL but the handler did not\n" +
+        "answer, so these failed on the webhook call rather than on a permission\n" +
+        "check. Deploy the app (Vercel Framework Preset must be Next.js), then\n" +
+        "re-run this test:",
+    );
+    for (const entry of unreachable) console.log(`  · ${entry.name}`);
   }
   if (failed.length) {
     console.error("\nISOLATION FAILURES:");
