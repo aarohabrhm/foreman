@@ -21,9 +21,28 @@ import { adminGraphql } from "./lib/hasura.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const results = [];
-const record = (name, passed, detail = "") => {
-  results.push({ name, passed, detail });
-  console.log(`  ${passed ? "PASS" : "FAIL"}  ${name}${detail ? ` — ${detail}` : ""}`);
+
+/**
+ * Checks that go through a Hasura Action are only meaningful once the Actions
+ * are actually in the schema (they need ACTION_BASE_URL on the Hasura side).
+ * Until then they are refused before any permission check runs, which proves
+ * nothing — so they are reported as inconclusive rather than scored as passes.
+ * scripts/verify-acceptance.mjs covers the same denials meanwhile, by calling
+ * the handlers directly with the payload Hasura would send.
+ *
+ * A missing field on a *table* type is different: it means the role has no
+ * permission on that table at all, which is the permission system working.
+ */
+const actionMissing = (detail) =>
+  /field '(triggerWorkflowRun|approveStep|saveWorkflow|startWorkflowViaWebhook)' not found/i.test(
+    detail ?? "",
+  ) || /no mutations exist/i.test(detail ?? "");
+
+const record = (name, passed, detail = "", { viaAction = false } = {}) => {
+  const inconclusive = passed && viaAction && actionMissing(detail);
+  results.push({ name, passed, detail, inconclusive });
+  const label = inconclusive ? "SKIP" : passed ? "PASS" : "FAIL";
+  console.log(`  ${label}  ${name}${detail ? ` — ${detail}` : ""}`);
 };
 
 const isDenied = (response) =>
@@ -198,6 +217,7 @@ async function main() {
     "Org B cannot trigger Org A's workflow",
     !triggered.data?.triggerWorkflowRun,
     isDenied(triggered) ?? "",
+    { viaAction: true },
   );
 
   // --- 7. Approving someone else's paused step
@@ -212,6 +232,7 @@ async function main() {
       "Org B cannot approve an Org A step",
       !approved.data?.approveStep,
       isDenied(approved) ?? "",
+      { viaAction: true },
     );
   }
 
@@ -248,6 +269,7 @@ async function main() {
     "Org B cannot edit Org A's workflow through saveWorkflow",
     !saved.data?.saveWorkflow,
     isDenied(saved) ?? "",
+    { viaAction: true },
   );
 
   // --- 9. Role enforcement inside Org A: a viewer cannot start a run
@@ -262,6 +284,7 @@ async function main() {
     "An Org A viewer cannot trigger a run in their own org",
     !viewerTrigger.data?.triggerWorkflowRun,
     isDenied(viewerTrigger) ?? "",
+    { viaAction: true },
   );
 
   // A viewer claiming to be an owner still matches no org_members row.
@@ -275,10 +298,23 @@ async function main() {
     "An Org A viewer claiming x-hasura-role: owner is still refused",
     !viewerAsOwner.data?.triggerWorkflowRun,
     isDenied(viewerAsOwner) ?? "",
+    { viaAction: true },
   );
 
   const failed = results.filter((entry) => !entry.passed);
-  console.log(`\n${results.length - failed.length}/${results.length} checks passed.`);
+  const skipped = results.filter((entry) => entry.inconclusive);
+  console.log(
+    `\n${results.length - failed.length - skipped.length}/${results.length} checks passed` +
+      (skipped.length ? `, ${skipped.length} inconclusive.` : "."),
+  );
+  if (skipped.length) {
+    console.log(
+      "\nINCONCLUSIVE — the Action is not in the GraphQL schema, so these were\n" +
+        "refused before any permission check ran. Set ACTION_BASE_URL in the nhost\n" +
+        "dashboard, re-run `npm run db:push`, then re-run this test:",
+    );
+    for (const entry of skipped) console.log(`  · ${entry.name}`);
+  }
   if (failed.length) {
     console.error("\nISOLATION FAILURES:");
     for (const entry of failed) console.error(`  ✗ ${entry.name} — ${entry.detail}`);

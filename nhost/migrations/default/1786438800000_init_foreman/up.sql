@@ -95,9 +95,11 @@ CREATE TABLE public.workflow_steps (
   branch_key  text CHECK (branch_key IN ('true', 'false')),
   created_at  timestamptz NOT NULL DEFAULT now(),
   updated_at  timestamptz NOT NULL DEFAULT now(),
-  -- Deferrable so a reorder can shuffle positions inside one transaction.
+  -- Not deferrable: saveWorkflow upserts steps with ON CONFLICT, which Postgres
+  -- refuses against a deferrable constraint. A position is a stable slot whose
+  -- contents are rewritten, so a reorder never needs the deferral.
   CONSTRAINT workflow_steps_workflow_id_position_key
-    UNIQUE (workflow_id, position) DEFERRABLE INITIALLY DEFERRED
+    UNIQUE (workflow_id, position)
 );
 
 CREATE INDEX workflow_steps_workflow_id_idx ON public.workflow_steps (workflow_id);

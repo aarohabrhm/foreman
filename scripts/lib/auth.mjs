@@ -20,7 +20,9 @@ async function authPost(path, body) {
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const message = payload?.message ?? payload?.error ?? response.statusText;
+    const message = [payload?.message ?? payload?.error ?? response.statusText, payload?.reason]
+      .filter(Boolean)
+      .join(" — ");
     const error = new Error(`${path} failed (${response.status}): ${message}`);
     error.status = response.status;
     error.payload = payload;
@@ -43,9 +45,37 @@ export const signUp = (email, password, displayName) =>
  * Creates the user if they do not exist, and returns their session either way.
  * Re-running the seed is therefore harmless.
  */
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * nhost rate-limits sign-up and sign-in per IP and does not return Retry-After,
+ * so a 429 is waited out rather than treated as a failure. Seeding four accounts
+ * in one go can otherwise trip the limit.
+ */
+async function withRateLimitBackoff(operation, label, attempts = 8) {
+  let waitMs = 30_000;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error.status !== 429 || attempt === attempts) throw error;
+      console.log(
+        `  rate limited on ${label}; waiting ${Math.round(waitMs / 1000)}s ` +
+          `(attempt ${attempt}/${attempts - 1})`,
+      );
+      await sleep(waitMs);
+      waitMs = Math.min(waitMs * 2, 300_000);
+    }
+  }
+  throw new Error(`Gave up on ${label} after ${attempts} attempts`);
+}
+
 export async function ensureUser(email, password, displayName) {
   try {
-    const created = await signUp(email, password, displayName);
+    const created = await withRateLimitBackoff(
+      () => signUp(email, password, displayName),
+      `sign-up for ${email}`,
+    );
     if (created?.session) return { session: created.session, created: true };
   } catch (error) {
     const alreadyExists =
@@ -54,7 +84,10 @@ export async function ensureUser(email, password, displayName) {
     if (!alreadyExists) throw error;
   }
 
-  const signedIn = await signIn(email, password);
+  const signedIn = await withRateLimitBackoff(
+    () => signIn(email, password),
+    `sign-in for ${email}`,
+  );
   if (!signedIn?.session) {
     throw new Error(
       `Could not sign in as ${email}. If nhost requires email verification, disable it ` +
@@ -79,5 +112,19 @@ export async function userGraphql(accessToken, query, variables = {}, role) {
     body: JSON.stringify({ query, variables }),
   });
 
-  return response.json();
+  // Not always JSON: a rate limit or an edge error can return an HTML page, and
+  // a test that crashes on that reports nothing useful about isolation.
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      errors: [
+        {
+          message: `non-JSON response (HTTP ${response.status}): ${text.replace(/\s+/g, " ").slice(0, 120)}`,
+        },
+      ],
+      httpStatus: response.status,
+    };
+  }
 }

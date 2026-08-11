@@ -99,13 +99,38 @@ async function applyMetadata() {
     live.cron_triggers = mergeByName(live.cron_triggers, owned.cronTriggers);
   }
 
-  await metadataApi("replace_metadata", live);
+  // Actions, Event Triggers and the cron trigger all resolve {{ACTION_BASE_URL}}
+  // from a Hasura env var. Until that variable exists on the nhost side those
+  // objects are inconsistent — and because replace_metadata is atomic, a strict
+  // apply would also roll back the tables and permissions, which do not depend
+  // on it. So: try strict first, and fall back to applying everything else while
+  // reporting exactly what is still pending.
+  let pending = [];
+  try {
+    await metadataApi("replace_metadata", live);
+  } catch (error) {
+    const inconsistencies = error.payload?.internal ?? [];
+    const envVarOnly =
+      inconsistencies.length > 0 &&
+      inconsistencies.every((entry) => /environment variables not found/i.test(entry.reason ?? ""));
+    if (!envVarOnly) throw error;
+
+    await metadataApi("replace_metadata", {
+      allow_inconsistent_metadata: true,
+      metadata: live,
+    });
+    pending = inconsistencies.map((entry) => ({
+      name: entry.name,
+      reason: entry.reason.replace(/^Inconsistent object: /, ""),
+    }));
+  }
 
   return {
     tables: owned.tables.length,
     kept: foreignTables.length,
     actions: ownedActions.length,
     cronTriggers: owned.cronTriggers?.length ?? 0,
+    pending,
   };
 }
 
@@ -123,13 +148,18 @@ async function main() {
       `${summary.actions} action(s), ${summary.cronTriggers} cron trigger(s).`,
   );
 
-  const inconsistent = await metadataApi("get_inconsistent_metadata", {});
-  if (inconsistent?.is_consistent === false) {
-    console.error("\nInconsistent metadata:");
-    console.error(JSON.stringify(inconsistent.inconsistent_objects, null, 2));
-    process.exitCode = 1;
+  if (summary.pending.length) {
+    console.log("\nPENDING — applied, but not yet active:");
+    for (const entry of summary.pending) console.log(`  · ${entry.name}: ${entry.reason}`);
+    console.log(
+      "\nSet ACTION_BASE_URL (and ACTION_SECRET) in the nhost dashboard under\n" +
+        "Settings -> Environment Variables, then re-run `npm run db:push`.\n" +
+        "Until then the schema and both permission layers are live, but Actions,\n" +
+        "Event Triggers and the cron trigger are not in the GraphQL schema.",
+    );
     return;
   }
+
   console.log("\nDone — metadata is consistent.");
 }
 

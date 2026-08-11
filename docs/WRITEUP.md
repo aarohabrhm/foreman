@@ -135,14 +135,51 @@ closes the tab misses nothing.
 
 ## Verification
 
-- `npm test` — 10 offline tests over branch evaluation, template resolution and
-  the retry wrapper.
-- `npm run check:permissions` — static audit of every Layer 1 rule.
-- `npm run test:cross-org` — signs in as a real Org B user and attacks Org A by
-  ID across reads, listings, the live subscription, triggering, approving and
-  writing; also proves an Org A viewer cannot trigger a run, including when
-  claiming `x-hasura-role: owner`.
+Executed against the live nhost project (`cdwilajfcvntdjqwhzlc`, eu-central-1)
+with a real Groq key.
 
-> **Status:** the offline tests and the static audit pass. The live acceptance
-> run and `test:cross-org` execute against a provisioned nhost project; results
-> are recorded here once that project exists.
+**`npm run verify:acceptance` — 15/15.** Drives the Action handlers with exactly
+the payload Hasura sends and watches progress over a real subscription:
+
+```
+PASS  viewer cannot trigger a run — Role 'viewer' cannot trigger runs
+PASS  Org B owner cannot trigger Org A's workflow — Workflow f7f65bc4… not found
+PASS  owner can trigger a run
+      live: 0. Classify the request      -> running -> succeeded
+      live: 1. Is it urgent?             -> running -> succeeded
+      live: 2. Page the on-call service  -> running -> succeeded
+      live: 3. Log to the routine queue  -> skipped
+      live: 4. Human approval            -> awaiting_approval
+PASS  run reaches the approval gate and pauses
+PASS  llm_call produced a real completion — "URGENT"
+PASS  conditional_branch ran exactly one side — branch=true
+PASS  live subscription observed the steps without polling — 5 transitions
+PASS  Org B owner cannot approve Org A's gate
+PASS  an Org A viewer cannot approve the gate
+PASS  an Org A editor can approve the gate
+PASS  the run resumes and completes
+PASS  the gate records who approved it
+PASS  the db_write step ran after approval
+PASS  quota is consumed once for the run — 0 -> 1 of 25
+```
+
+**`npm run test:cross-org` — 8/13 passed, 5 inconclusive.** Signs in as a real
+Org B user and attacks Org A by ID. Proven: reads by ID under *every* role B can
+claim (owner, editor, viewer, user), listings filtered by `org_id`, `step_runs`
+by run ID, a live websocket subscription to an Org A run (zero rows), and a
+direct insert into Org A (`check constraint of an insert/update permission has
+failed`). The five inconclusive checks go through Hasura Actions, which are not
+in the GraphQL schema until `ACTION_BASE_URL` is configured on the Hasura side;
+`verify:acceptance` covers those same denials by calling the handlers directly.
+They are reported as inconclusive rather than as passes, because "the field does
+not exist" is not evidence that a permission check ran.
+
+**`npm test` — 10/10** offline tests over branch evaluation, template resolution
+and the retry wrapper. **`npm run check:permissions` — 69 rules audited**, all
+joining `org_members` and pinning the caller's role.
+
+Two bugs this found, both fixed: `workflow_steps (workflow_id, position)` was
+created `DEFERRABLE`, which Postgres refuses to use for `ON CONFLICT` — the
+deferral was never needed, since a position is a slot whose contents are
+rewritten rather than a value that moves between rows. And nhost rejects
+parentheses in `displayName`.

@@ -12,17 +12,41 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { ensureUser } from "./lib/auth.mjs";
-import { adminGraphql, hasuraBaseUrl } from "./lib/hasura.mjs";
+import { adminGraphql, hasuraBaseUrl, runSql } from "./lib/hasura.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const password = process.env.SEED_PASSWORD || "Foreman!2026";
 
+// nhost validates displayName against ^[\p{L}\p{N}\p{S} ,.'-]+$ — no parentheses.
 const USERS = [
-  { key: "aOwner", email: "a-owner@foreman.test", name: "Ada (Org A owner)" },
-  { key: "aEditor", email: "a-editor@foreman.test", name: "Eli (Org A editor)" },
-  { key: "aViewer", email: "a-viewer@foreman.test", name: "Vic (Org A viewer)" },
-  { key: "bOwner", email: "b-owner@foreman.test", name: "Bo (Org B owner)" },
+  { key: "aOwner", email: "a-owner@foreman.test", name: "Ada - Org A owner" },
+  { key: "aEditor", email: "a-editor@foreman.test", name: "Eli - Org A editor" },
+  { key: "aViewer", email: "a-viewer@foreman.test", name: "Vic - Org A viewer" },
+  { key: "bOwner", email: "b-owner@foreman.test", name: "Bo - Org B owner" },
 ];
+
+/**
+ * Lets a user *present* any of the three roles.
+ *
+ * nhost models allowed roles per user and globally (auth.user_roles); this app
+ * models them per organization (public.org_members). Granting all three to every
+ * seeded account keeps those two facts from being confused — and makes the point
+ * the permission design rests on directly testable: holding `owner` in the JWT
+ * buys nothing, because every rule still has to find a matching org_members row.
+ * scripts/test-cross-org.mjs relies on exactly this to attack Org A as `owner`.
+ */
+async function grantSelectableRoles(userId) {
+  if (!/^[0-9a-f-]{36}$/i.test(userId)) throw new Error(`Unexpected user id: ${userId}`);
+  await runSql(`
+    INSERT INTO auth.user_roles (user_id, role)
+    SELECT '${userId}'::uuid, r.role
+    FROM (VALUES ('user'), ('owner'), ('editor'), ('viewer')) AS r(role)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM auth.user_roles existing
+      WHERE existing.user_id = '${userId}'::uuid AND existing.role = r.role
+    );
+  `);
+}
 
 async function upsertOrg(name, quotaAllowed) {
   const existing = await adminGraphql(
@@ -237,6 +261,7 @@ async function main() {
   for (const spec of USERS) {
     const { session, created } = await ensureUser(spec.email, password, spec.name);
     users[spec.key] = { id: session.user.id, email: spec.email };
+    await grantSelectableRoles(session.user.id);
     console.log(`  ${created ? "created" : "reusing"} ${spec.email}`);
   }
 
