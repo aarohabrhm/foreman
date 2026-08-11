@@ -1,0 +1,10 @@
+table:
+  name: step_runs
+  schema: public
+object_relationships:
+  - name: run
+    using:
+      foreign_key_constraint_on: workflow_run_id
+  - name: step
+    using:
+      foreign_key_constraint_on: workflow_step_id

@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "db:push": "node --env-file=.env.local scripts/db-push.mjs",
+    "db:seed": "node --env-file=.env.local scripts/seed.mjs",
+    "test:cross-org": "node --env-file=.env.local scripts/test-cross-org.mjs"
   },
   "dependencies": {
     "@nhost/nhost-js": "^4.8.0",
@@ -27,6 +31,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "yaml": "^2.9.0"
   }
 }

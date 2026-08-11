@@ -1,0 +1,34 @@
+table:
+  name: organizations
+  schema: public
+object_relationships:
+  - name: usage
+    using:
+      manual_configuration:
+        remote_table:
+          name: org_usage_current_period
+          schema: public
+        column_mapping:
+          id: org_id
+array_relationships:
+  - name: members
+    using:
+      foreign_key_constraint_on:
+        column: org_id
+        table:
+          name: org_members
+          schema: public
+  - name: workflows
+    using:
+      foreign_key_constraint_on:
+        column: org_id
+        table:
+          name: workflows
+          schema: public
+  - name: runs
+    using:
+      foreign_key_constraint_on:
+        column: org_id
+        table:
+          name: workflow_runs
+          schema: public

@@ -1,0 +1,10 @@
+table:
+  name: db_write_results
+  schema: public
+object_relationships:
+  - name: org
+    using:
+      foreign_key_constraint_on: org_id
+  - name: run
+    using:
+      foreign_key_constraint_on: workflow_run_id

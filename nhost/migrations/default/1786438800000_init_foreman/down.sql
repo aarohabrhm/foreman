@@ -1,0 +1,11 @@
+DROP VIEW IF EXISTS public.org_usage_current_period;
+DROP TABLE IF EXISTS public.watched_records;
+DROP TABLE IF EXISTS public.db_write_results;
+DROP TABLE IF EXISTS public.step_runs;
+DROP TABLE IF EXISTS public.workflow_runs;
+DROP TABLE IF EXISTS public.workflow_triggers;
+DROP TABLE IF EXISTS public.workflow_steps;
+DROP TABLE IF EXISTS public.workflows;
+DROP TABLE IF EXISTS public.org_members;
+DROP TABLE IF EXISTS public.organizations;
+DROP FUNCTION IF EXISTS public.set_current_timestamp_updated_at();

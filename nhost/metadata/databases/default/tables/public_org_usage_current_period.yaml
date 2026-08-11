@@ -1,0 +1,12 @@
+table:
+  name: org_usage_current_period
+  schema: public
+object_relationships:
+  - name: org
+    using:
+      manual_configuration:
+        remote_table:
+          name: organizations
+          schema: public
+        column_mapping:
+          org_id: id
