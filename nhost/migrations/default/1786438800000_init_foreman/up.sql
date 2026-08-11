@@ -120,7 +120,12 @@ CREATE TABLE public.workflow_triggers (
   -- Only the SHA-256 hash is stored; the plaintext is shown to the owner once.
   token_hash   text,
   created_at   timestamptz NOT NULL DEFAULT now(),
-  updated_at   timestamptz NOT NULL DEFAULT now()
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  -- One trigger of each kind per workflow. This gives saveWorkflow a natural key
+  -- to upsert on, so re-saving a workflow keeps the existing webhook token
+  -- instead of rotating it.
+  CONSTRAINT workflow_triggers_workflow_id_trigger_type_key
+    UNIQUE (workflow_id, trigger_type)
 );
 
 CREATE INDEX workflow_triggers_workflow_id_idx ON public.workflow_triggers (workflow_id);

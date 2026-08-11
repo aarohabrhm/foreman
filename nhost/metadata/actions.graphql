@@ -1,0 +1,59 @@
+type Mutation {
+  """
+  Start a run of a workflow. Requires owner or editor in the workflow's org.
+  """
+  triggerWorkflowRun(workflow_id: String!, input_json: String): TriggerWorkflowRunOutput!
+}
+
+type Mutation {
+  """
+  Clear a paused approval_gate and resume the run.
+  """
+  approveStep(step_run_id: String!, note: String): ApproveStepOutput!
+}
+
+type Mutation {
+  """
+  Create or edit a workflow together with its steps and triggers.
+  """
+  saveWorkflow(workflow: SaveWorkflowInput!): SaveWorkflowOutput!
+}
+
+input WorkflowStepInput {
+  position: Int!
+  name: String!
+  type: String!
+  config_json: String
+  branch_key: String
+}
+
+input WorkflowTriggerInput {
+  trigger_type: String!
+  config_json: String
+  is_enabled: Boolean
+}
+
+input SaveWorkflowInput {
+  workflow_id: String
+  org_id: String!
+  name: String!
+  description: String
+  steps: [WorkflowStepInput!]!
+  triggers: [WorkflowTriggerInput!]!
+}
+
+type TriggerWorkflowRunOutput {
+  run_id: String!
+  status: String!
+}
+
+type ApproveStepOutput {
+  run_id: String!
+  step_run_id: String!
+  status: String!
+}
+
+type SaveWorkflowOutput {
+  workflow_id: String!
+  webhook_token: String
+}

@@ -1,0 +1,140 @@
+actions:
+  # --- The core integration -------------------------------------------------
+  # ACTION_BASE_URL and ACTION_SECRET are env vars on the Hasura side (nhost
+  # dashboard -> Settings -> Environment Variables), not app env vars:
+  #   ACTION_BASE_URL = https://<your-app>.vercel.app  (or a tunnel in local dev)
+  #   ACTION_SECRET   = the same random string as ACTION_SECRET in .env.local
+  - name: triggerWorkflowRun
+    definition:
+      kind: synchronous
+      type: mutation
+      handler: "{{ACTION_BASE_URL}}/api/actions/triggerWorkflowRun"
+      forward_client_headers: false
+      timeout: 60
+      arguments:
+        - name: workflow_id
+          type: String!
+        - name: input_json
+          type: String
+      output_type: TriggerWorkflowRunOutput!
+      headers:
+        - name: x-foreman-action-secret
+          value_from_env: ACTION_SECRET
+    permissions:
+      - role: owner
+      - role: editor
+    comment: >-
+      Starts a run. The handler re-checks the caller's role and the org quota in
+      code (Layer 2) before creating the run, then returns the run id
+      immediately; step progress arrives over the step_runs subscription.
+      `viewer` is absent from this list deliberately.
+
+  - name: approveStep
+    definition:
+      kind: synchronous
+      type: mutation
+      handler: "{{ACTION_BASE_URL}}/api/actions/approveStep"
+      forward_client_headers: false
+      timeout: 60
+      arguments:
+        - name: step_run_id
+          type: String!
+        - name: note
+          type: String
+      output_type: ApproveStepOutput!
+      headers:
+        - name: x-foreman-action-secret
+          value_from_env: ACTION_SECRET
+    permissions:
+      - role: owner
+      - role: editor
+    comment: >-
+      Clears a paused approval_gate and resumes the run. The handler itself
+      checks the approver's role (assertCanApprove in lib/auth/layer2.ts) — this
+      is a mid-execution decision with no row to filter, so it cannot be a
+      Hasura permission.
+
+  - name: saveWorkflow
+    definition:
+      kind: synchronous
+      type: mutation
+      handler: "{{ACTION_BASE_URL}}/api/actions/saveWorkflow"
+      forward_client_headers: false
+      timeout: 60
+      arguments:
+        - name: workflow
+          type: SaveWorkflowInput!
+      output_type: SaveWorkflowOutput!
+      headers:
+        - name: x-foreman-action-secret
+          value_from_env: ACTION_SECRET
+    permissions:
+      - role: owner
+      - role: editor
+    comment: >-
+      Creates or edits a workflow with its steps and triggers in one call, so the
+      Layer 2 step-type and trigger-type restrictions (owner-only db_write,
+      notify, webhook) can be applied to the whole submission before anything is
+      written.
+
+custom_types:
+  enums: []
+  input_objects:
+    - name: WorkflowStepInput
+      fields:
+        - name: position
+          type: Int!
+        - name: name
+          type: String!
+        - name: type
+          type: String!
+        # JSON travels as a string so the action signature needs no custom
+        # scalar; the handlers parse it and report bad JSON as a clean error.
+        - name: config_json
+          type: String
+        - name: branch_key
+          type: String
+    - name: WorkflowTriggerInput
+      fields:
+        - name: trigger_type
+          type: String!
+        - name: config_json
+          type: String
+        - name: is_enabled
+          type: Boolean
+    - name: SaveWorkflowInput
+      fields:
+        - name: workflow_id
+          type: String
+        - name: org_id
+          type: String!
+        - name: name
+          type: String!
+        - name: description
+          type: String
+        - name: steps
+          type: "[WorkflowStepInput!]!"
+        - name: triggers
+          type: "[WorkflowTriggerInput!]!"
+  objects:
+    - name: TriggerWorkflowRunOutput
+      fields:
+        - name: run_id
+          type: String!
+        - name: status
+          type: String!
+    - name: ApproveStepOutput
+      fields:
+        - name: run_id
+          type: String!
+        - name: step_run_id
+          type: String!
+        - name: status
+          type: String!
+    - name: SaveWorkflowOutput
+      fields:
+        - name: workflow_id
+          type: String!
+        - name: webhook_token
+          type: String
+  scalars: []

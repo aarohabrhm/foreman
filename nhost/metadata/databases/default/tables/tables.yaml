@@ -6,5 +6,6 @@
 - "!include public_workflow_runs.yaml"
 - "!include public_step_runs.yaml"
 - "!include public_db_write_results.yaml"
+- "!include public_notifications.yaml"
 - "!include public_watched_records.yaml"
 - "!include public_org_usage_current_period.yaml"

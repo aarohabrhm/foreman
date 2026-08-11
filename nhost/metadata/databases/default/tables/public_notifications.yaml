@@ -1,0 +1,73 @@
+table:
+  name: notifications
+  schema: public
+object_relationships:
+  - name: org
+    using:
+      foreign_key_constraint_on: org_id
+  - name: run
+    using:
+      foreign_key_constraint_on: workflow_run_id
+
+# --- Event trigger ---------------------------------------------------------
+# This is the `notify` step type: the engine enqueues a row, Hasura delivers it.
+# ACTION_BASE_URL and ACTION_SECRET are Hasura env vars (nhost dashboard ->
+# Settings -> Environment Variables), not app env vars.
+event_triggers:
+  - name: notify_dispatch
+    definition:
+      enable_manual: true
+      insert:
+        columns: "*"
+    webhook: "{{ACTION_BASE_URL}}/api/hooks/notify"
+    headers:
+      - name: x-foreman-action-secret
+        value_from_env: ACTION_SECRET
+    retry_conf:
+      num_retries: 2
+      interval_sec: 10
+      timeout_sec: 60
+
+# --- Layer 1 ---------------------------------------------------------------
+# Written only by the engine and the delivery hook; readable by org members.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &notification_columns
+        - id
+        - org_id
+        - workflow_run_id
+        - step_run_id
+        - channel
+        - message
+        - status
+        - error
+        - created_at
+        - delivered_at
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: owner
+  - role: editor
+    permission:
+      columns: *notification_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: editor
+  - role: viewer
+    permission:
+      columns: *notification_columns
+      filter:
+        org:
+          members:
+            user_id:
+              _eq: X-Hasura-User-Id
+            role:
+              _eq: viewer
