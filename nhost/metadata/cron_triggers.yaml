@@ -1,0 +1,17 @@
+- name: foreman_scheduled_dispatch
+  webhook: "{{ACTION_BASE_URL}}/api/hooks/scheduled"
+  # Hasura's own scheduler is the cron here. Each workflow's `scheduled` trigger
+  # declares its cadence in config ({"every_minutes": N}); the handler starts the
+  # ones that are due, so a new scheduled workflow needs no metadata change.
+  schedule: "*/15 * * * *"
+  include_in_metadata: true
+  payload: {}
+  retry_conf:
+    num_retries: 1
+    retry_interval_seconds: 30
+    timeout_seconds: 60
+    tolerance_seconds: 21600
+  headers:
+    - name: x-foreman-action-secret
+      value_from_env: ACTION_SECRET
+  comment: Ticks /api/hooks/scheduled; the handler decides which workflows are due.

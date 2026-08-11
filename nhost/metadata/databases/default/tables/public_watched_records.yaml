@@ -6,6 +6,24 @@ object_relationships:
     using:
       foreign_key_constraint_on: org_id
 
+# --- Event trigger ---------------------------------------------------------
+# The database-event trigger type: inserting a row here starts a run of every
+# workflow in that row's org with an enabled database_event trigger.
+event_triggers:
+  - name: watched_records_start_runs
+    definition:
+      enable_manual: true
+      insert:
+        columns: "*"
+    webhook: "{{ACTION_BASE_URL}}/api/hooks/db-event"
+    headers:
+      - name: x-foreman-action-secret
+        value_from_env: ACTION_SECRET
+    retry_conf:
+      num_retries: 2
+      interval_sec: 10
+      timeout_sec: 60
+
 # --- Layer 1 ---------------------------------------------------------------
 # The table behind the database-event trigger. owner/editor can insert a row
 # (which starts a run with no button click); viewer can only read.

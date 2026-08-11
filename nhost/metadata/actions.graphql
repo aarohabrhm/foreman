@@ -19,6 +19,18 @@ type Mutation {
   saveWorkflow(workflow: SaveWorkflowInput!): SaveWorkflowOutput!
 }
 
+type Mutation {
+  """
+  Inbound webhook endpoint for external systems. Unauthenticated; authorised by
+  the trigger's own bearer token.
+  """
+  startWorkflowViaWebhook(
+    workflow_id: String!
+    token: String!
+    payload_json: String
+  ): TriggerWorkflowRunOutput!
+}
+
 input WorkflowStepInput {
   position: Int!
   name: String!

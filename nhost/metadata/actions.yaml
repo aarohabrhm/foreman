@@ -77,6 +77,32 @@ actions:
       notify, webhook) can be applied to the whole submission before anything is
       written.
 
+  - name: startWorkflowViaWebhook
+    definition:
+      kind: synchronous
+      type: mutation
+      handler: "{{ACTION_BASE_URL}}/api/actions/startWorkflowViaWebhook"
+      forward_client_headers: false
+      timeout: 60
+      arguments:
+        - name: workflow_id
+          type: String!
+        - name: token
+          type: String!
+        - name: payload_json
+          type: String
+      output_type: TriggerWorkflowRunOutput!
+      headers:
+        - name: x-foreman-action-secret
+          value_from_env: ACTION_SECRET
+    permissions:
+      - role: public
+    comment: >-
+      Inbound endpoint for external systems: starts a run with no user session.
+      Exposed to Hasura's unauthenticated `public` role and authenticated by the
+      trigger's bearer token, of which only a SHA-256 hash is stored. Creating a
+      webhook trigger is owner-only (Layer 2).
+
 custom_types:
   enums: []
   input_objects:
