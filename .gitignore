@@ -38,6 +38,9 @@ yarn-error.log*
 /nhost/.nhost
 /.hasura
 
+# seed output (contains a webhook token and test account passwords)
+/.foreman-seed.json
+
 # vercel
 .vercel
 
