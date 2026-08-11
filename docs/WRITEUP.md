@@ -178,6 +178,13 @@ not exist" is not evidence that a permission check ran.
 and the retry wrapper. **`npm run check:permissions` — 69 rules audited**, all
 joining `org_members` and pinning the caller's role.
 
+**UI, in a real browser.** As the Org A owner: org switcher, role badge, a live
+quota bar reading 1/25, the workflow with its six steps and three triggers, and
+a run view showing every step with the live indicator, the skipped branch and
+the approval timestamp. As the Org A viewer: the same workflow, read-only — no
+New workflow, no Save, no Run, no database-event panel. No app console errors
+and no hydration warnings.
+
 Two bugs this found, both fixed: `workflow_steps (workflow_id, position)` was
 created `DEFERRABLE`, which Postgres refuses to use for `ON CONFLICT` — the
 deferral was never needed, since a position is a slot whose contents are
