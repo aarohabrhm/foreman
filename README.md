@@ -122,6 +122,8 @@ default `Foreman!2026`):
 | `npm run dev` | Next.js dev server |
 | `npm run db:push` | Apply SQL migrations, merge Hasura metadata |
 | `npm run db:seed` | Create the demo orgs, users, workflow and webhook token |
+| `npm run verify:acceptance` | Run the whole acceptance scenario and assert it (needs `npm run dev`) |
+| `npm run verify:triggers` | Verify the webhook, database-event, cron and notify handlers |
 | `npm run test:cross-org` | **Attack Org A as a real Org B user** and assert every attempt fails |
 | `npm run check:permissions` | Static audit: every Layer 1 rule joins `org_members` and pins its role |
 | `npm test` | Offline tests for branch evaluation, templating and retry |

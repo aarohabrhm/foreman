@@ -7,7 +7,7 @@
  */
 
 import { createHash, randomBytes } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -150,6 +150,16 @@ function demoSteps() {
         },
       },
     },
+    {
+      position: 6,
+      name: "Announce the outcome",
+      type: "notify",
+      branch_key: null,
+      config: {
+        channel: "slack",
+        message: "Triage complete: {{steps.0.output.text}}",
+      },
+    },
   ];
 }
 
@@ -279,14 +289,47 @@ async function main() {
   const token = await upsertTriggers(workflowA);
   const workflowB = await upsertWorkflow(orgB, "Contoso internal triage", users.bOwner.id);
 
+  // Org B carries the scheduled trigger, so the cron path is demonstrable
+  // without adding recurring runs to the org used for the walkthrough.
+  await adminGraphql(
+    `mutation UpsertScheduled($object: workflow_triggers_insert_input!) {
+       insert_workflow_triggers_one(
+         object: $object,
+         on_conflict: {
+           constraint: workflow_triggers_workflow_id_trigger_type_key,
+           update_columns: [config, is_enabled]
+         }
+       ) { id }
+     }`,
+    {
+      object: {
+        workflow_id: workflowB,
+        trigger_type: "scheduled",
+        config: { every_minutes: 1440 },
+        is_enabled: true,
+      },
+    },
+  );
+
+  // Only a hash of the webhook token is stored, so a token minted by an earlier
+  // run can never be recovered — re-running the seed must not overwrite the
+  // recorded one with null.
+  const seedPath = resolve(repoRoot, ".foreman-seed.json");
+  let previousToken = null;
+  try {
+    previousToken = JSON.parse(readFileSync(seedPath, "utf8")).webhookToken ?? null;
+  } catch {
+    /* first run */
+  }
+
   const seed = {
     password,
     orgA: { id: orgA, name: "Northwind Support", workflowId: workflowA },
     orgB: { id: orgB, name: "Contoso Logistics", workflowId: workflowB },
     users,
-    webhookToken: token,
+    webhookToken: token ?? previousToken,
   };
-  writeFileSync(resolve(repoRoot, ".foreman-seed.json"), JSON.stringify(seed, null, 2));
+  writeFileSync(seedPath, JSON.stringify(seed, null, 2));
 
   console.log(`\n  Org A workflow: ${workflowA}`);
   console.log(`  Org B workflow: ${workflowB}`);

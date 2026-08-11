@@ -31,9 +31,6 @@ async function authPost(path, body) {
   return payload;
 }
 
-export const signIn = (email, password) =>
-  authPost("/signin/email-password", { email, password });
-
 export const signUp = (email, password, displayName) =>
   authPost("/signup/email-password", {
     email,
@@ -69,6 +66,13 @@ async function withRateLimitBackoff(operation, label, attempts = 8) {
   }
   throw new Error(`Gave up on ${label} after ${attempts} attempts`);
 }
+
+/** Sign-in, waiting out nhost's per-IP rate limit rather than failing. */
+export const signIn = (email, password) =>
+  withRateLimitBackoff(
+    () => authPost("/signin/email-password", { email, password }),
+    `sign-in for ${email}`,
+  );
 
 export async function ensureUser(email, password, displayName) {
   try {

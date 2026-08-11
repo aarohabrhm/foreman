@@ -174,6 +174,15 @@ in the GraphQL schema until `ACTION_BASE_URL` is configured on the Hasura side;
 They are reported as inconclusive rather than as passes, because "the field does
 not exist" is not evidence that a permission check ran.
 
+**`npm run verify:triggers` — 13/13.** The three non-manual triggers and the
+notify hook, driven with the payloads Hasura sends: a webhook with a wrong token
+refused and with the right token starting a run that executes and pauses; a
+`watched_records` insert starting a run with no button click; a non-matching
+label starting nothing; **an Org B row never starting an Org A workflow**; a cron
+tick starting a due workflow and the next tick correctly finding nothing due;
+and a notification stamped `stubbed` with the omission disclosed. Hooks without
+the shared secret, or with the wrong one, are rejected.
+
 **`npm test` — 10/10** offline tests over branch evaluation, template resolution
 and the retry wrapper. **`npm run check:permissions` — 69 rules audited**, all
 joining `org_members` and pinning the caller's role.
