@@ -4,6 +4,11 @@ Build multi-step AI workflows, trigger them four ways, watch them execute live,
 and pause them for human approval — on nhost (Postgres + Hasura + Auth) with a
 Next.js frontend.
 
+**Live app: https://foreman-two-sigma.vercel.app**
+
+Sign in with any of the seeded accounts below (password `Foreman!2026`);
+`a-owner@foreman.test` is the one to start with.
+
 - **Step types**: `llm_call` (Groq), `http_request`, `db_write`, `notify`,
   `conditional_branch`, `approval_gate`
 - **Trigger types**: manual, webhook (Hasura Action), scheduled (Hasura cron),

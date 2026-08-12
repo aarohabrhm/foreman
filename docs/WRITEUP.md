@@ -151,7 +151,26 @@ runs.
 ## Verification
 
 Executed against the live nhost project (`cdwilajfcvntdjqwhzlc`, eu-central-1)
-with a real Groq key.
+and the deployed app at **https://foreman-two-sigma.vercel.app**, with a real
+Groq key.
+
+**`npm run verify:live` — 12/12, in production.** This is the only suite that
+touches nothing but the public GraphQL endpoint, so it exercises the full path:
+browser → Hasura → Action → deployed handler → engine → Postgres → subscription.
+Hasura routes `triggerWorkflowRun` to Vercel, the engine runs there and pauses at
+the gate, a viewer and an Org B owner are both refused *through the real Action*,
+an editor's approval resumes the run to completion, an unauthenticated webhook
+call starts a run, a `watched_records` insert starts one via the Event Trigger,
+and the notify message is delivered by its Event Trigger.
+
+**In the browser, on the deployed app:** pressing Run streams the steps live,
+skips the untaken branch, pauses at the gate, and — after clicking *Approve and
+continue* — resumes through `db_write` and `notify` to all seven steps green,
+with no refresh.
+
+**`npm run test:cross-org` — 13/13, all with genuine permission reasons**
+(`Workflow … not found`, `Organization … not found`, `Role 'viewer' cannot
+trigger runs`), not webhook or schema errors.
 
 **`npm run verify:acceptance` — 15/15.** Drives the Action handlers with exactly
 the payload Hasura sends and watches progress over a real subscription:
@@ -209,8 +228,19 @@ the approval timestamp. As the Org A viewer: the same workflow, read-only — no
 New workflow, no Save, no Run, no database-event panel. No app console errors
 and no hydration warnings.
 
-Two bugs this found, both fixed: `workflow_steps (workflow_id, position)` was
-created `DEFERRABLE`, which Postgres refuses to use for `ON CONFLICT` — the
-deferral was never needed, since a position is a slot whose contents are
-rewritten rather than a value that moves between rows. And nhost rejects
-parentheses in `displayName`.
+Three bugs this found, all fixed:
+
+1. **Runs created but never executed on Vercel** — the serious one, described
+   under pause/resume above. Fire-and-forget after the response is unreliable on
+   serverless; execution moved to its own invocation.
+2. `workflow_steps (workflow_id, position)` was created `DEFERRABLE`, which
+   Postgres refuses to use for `ON CONFLICT` — the deferral was never needed,
+   since a position is a slot whose contents are rewritten rather than a value
+   that moves between rows.
+3. nhost rejects parentheses in `displayName`.
+
+Only the first was reachable through the UI, and only in production — which is
+why the suites are split the way they are: `verify:acceptance` and
+`verify:triggers` prove the handler logic anywhere, and `verify:live` proves the
+deployed wiring. Passing the first two while failing the third is exactly the
+state that bug produced.
