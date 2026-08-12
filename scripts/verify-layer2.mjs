@@ -158,6 +158,67 @@ async function main() {
     );
   }
 
+  // --- Reordering ----------------------------------------------------------
+  // Positions are stable slots whose contents are rewritten, so a reorder has to
+  // move the step's name/type/config, not just its number.
+  if (editorOk.id) {
+    await userGraphql(
+      editor.accessToken,
+      SAVE,
+      {
+        workflow: {
+          ...base,
+          workflow_id: editorOk.id,
+          name: "L2 editor workflow",
+          steps: [
+            step(0, "Gate", "approval_gate", {}),
+            step(1, "Classify", "llm_call", { prompt: "Say OK" }),
+            step(2, "Check", "conditional_branch", { left: "{{last.text}}", operator: "contains", right: "OK" }),
+          ],
+        },
+      },
+      "editor",
+    );
+
+    const after = await adminGraphql(
+      `query ($id: uuid!) {
+         workflow_steps(where: {workflow_id: {_eq: $id}}, order_by: {position: asc}) {
+           position name type
+         }
+       }`,
+      { id: editorOk.id },
+    );
+    const order = after.workflow_steps.map((s) => `${s.position}:${s.type}`).join(" ");
+    check(
+      "reordering steps rewrites each slot's type and config",
+      order === "0:approval_gate 1:llm_call 2:conditional_branch",
+      order,
+    );
+
+    const shortened = await userGraphql(
+      editor.accessToken,
+      SAVE,
+      {
+        workflow: {
+          ...base,
+          workflow_id: editorOk.id,
+          name: "L2 editor workflow",
+          steps: [step(0, "Classify", "llm_call", { prompt: "Say OK" })],
+        },
+      },
+      "editor",
+    );
+    const remaining = await adminGraphql(
+      `query ($id: uuid!) { workflow_steps(where: {workflow_id: {_eq: $id}}) { position } }`,
+      { id: editorOk.id },
+    );
+    check(
+      "removing steps drops the tail rather than leaving orphans",
+      !shortened.errors && remaining.workflow_steps.length === 1,
+      `${remaining.workflow_steps.length} step(s) remain`,
+    );
+  }
+
   // --- Viewers cannot author at all ----------------------------------------
   const viewerSave = await save(viewer.accessToken, "viewer", {
     ...base,
