@@ -1,16 +1,24 @@
-# Foreman
+<div align="center">
 
-**An AI agent workflow builder.** Compose ordered steps — including real LLM
-calls — trigger them four different ways, watch every step stream live, and pause
-mid-run for human approval. Multi-tenant, with two independently enforced
-permission layers.
-
-Built on nhost (PostgreSQL + Hasura + Auth) with a Next.js frontend and engine.
-
-**Live app:** https://foreman-two-sigma.vercel.app
-**Design write-up:** [docs/WRITEUP.md](docs/WRITEUP.md)
-
----
+# Foreman - An AI agent workflow builder
+ 
+Compose ordered steps including real LLM calls trigger them four different ways, watch every step stream live and pause mid-run for human approval. Multi-tenant, with two independently enforced permission layers.
+ 
+Built on **nhost** (PostgreSQL + Hasura + Auth) with a **Next.js** frontend and engine.
+ 
+[![Live App](https://img.shields.io/badge/Live%20App-visit-2ea44f?style=for-the-badge)](https://foreman-two-sigma.vercel.app)
+[![Design Write-up](https://img.shields.io/badge/Design%20Write--up-read-blue?style=for-the-badge)](docs/WRITEUP.md)
+ 
+![Next.js](https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=next.js&logoColor=white)
+![Hasura](https://img.shields.io/badge/Hasura-1EB4D4?style=flat-square&logo=hasura&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)
+![nhost](https://img.shields.io/badge/nhost-0D2340?style=flat-square)
+![GraphQL](https://img.shields.io/badge/GraphQL-E10098?style=flat-square&logo=graphql&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-000000?style=flat-square&logo=vercel&logoColor=white)
+![Node](https://img.shields.io/badge/Node.js-22%2B-339933?style=flat-square&logo=node.js&logoColor=white)
+ 
+</div>
+<br>
 
 ## Contents
 
