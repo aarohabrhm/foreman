@@ -112,7 +112,7 @@ function demoSteps() {
       branch_key: "true",
       config: {
         method: "POST",
-        url: "https://httpbin.org/post",
+        url: "https://postman-echo.com/post",
         body: { severity: "high", summary: "{{steps.0.output.text}}" },
       },
     },
@@ -123,7 +123,7 @@ function demoSteps() {
       branch_key: "false",
       config: {
         method: "POST",
-        url: "https://httpbin.org/post",
+        url: "https://postman-echo.com/post",
         body: { severity: "normal", summary: "{{steps.0.output.text}}" },
       },
     },

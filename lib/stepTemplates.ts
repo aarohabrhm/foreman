@@ -51,7 +51,7 @@ export function defaultStepConfig(type: StepType): string {
     },
     http_request: {
       method: "POST",
-      url: "https://httpbin.org/post",
+      url: "https://postman-echo.com/post",
       body: { classification: "{{last.text}}" },
     },
     db_write: {
