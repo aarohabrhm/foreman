@@ -128,10 +128,25 @@ otherwise. The same property is what lets a webhook-triggered run and a manual
 run share one code path.
 
 Progress reaches the browser because every transition is a database write and the
-run view subscribes to `step_runs`. The Action itself returns the run id
-immediately and keeps executing in the background (`waitUntil` on Vercel), so a
-workflow that takes a minute never blocks a Hasura Action — and a client that
+run view subscribes to `step_runs`. The Action returns the run id immediately, so
+a workflow that takes a minute never blocks a Hasura Action — and a client that
 closes the tab misses nothing.
+
+**How execution is handed off, and why it is not `waitUntil`.** The obvious way
+to return early is to keep executing after responding. That was the original
+implementation and it is *wrong on serverless*: once the response is sent the
+instance can be frozen mid-run, leaving a run created but never executed, parked
+at `pending` forever. It failed exactly that way in production — and only
+sometimes, depending on whether the instance happened to stay warm, which is
+worse than failing outright.
+
+So the Action instead dispatches the run to `/api/hooks/execute`, a separate
+invocation whose entire job is that one run and which therefore cannot be frozen
+by an unrelated response. The dispatching request is abandoned after 1.5s: by
+then the callee has the whole request and is working, and the abort only stops
+the *caller* waiting for a reply. The execute endpoint is protected by the same
+shared secret as every other hook, so it is not a way for anyone else to drive
+runs.
 
 ## Verification
 

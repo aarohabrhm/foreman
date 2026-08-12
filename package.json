@@ -14,7 +14,8 @@
     "db:seed": "node --env-file=.env.local scripts/seed.mjs",
     "test:cross-org": "node --env-file=.env.local scripts/test-cross-org.mjs",
     "verify:acceptance": "node --env-file=.env.local scripts/verify-acceptance.mjs",
-    "verify:triggers": "node --env-file=.env.local scripts/verify-triggers.mjs"
+    "verify:triggers": "node --env-file=.env.local scripts/verify-triggers.mjs",
+    "verify:live": "node --env-file=.env.local scripts/verify-live.mjs"
   },
   "dependencies": {
     "@nhost/nhost-js": "^4.8.0",

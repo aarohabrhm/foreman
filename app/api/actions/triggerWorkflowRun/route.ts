@@ -2,10 +2,9 @@ import {
   ActionError,
   actionErrorResponse,
   readActionRequest,
-  runInBackground,
+  dispatchRun,
 } from "@/lib/actions/handler";
 import { assertCanTriggerRun, loadMembership, notFound } from "@/lib/auth/layer2";
-import { executeRun } from "@/lib/engine/executor";
 import { createRun, loadWorkflowForRun } from "@/lib/engine/startRun";
 
 export const maxDuration = 60;
@@ -47,7 +46,7 @@ export async function POST(request: Request): Promise<Response> {
       triggerPayload: parseInputJson(input.input_json),
     });
 
-    runInBackground(executeRun(runId));
+    dispatchRun(runId);
 
     return Response.json({ run_id: runId, status: "running" });
   } catch (error) {

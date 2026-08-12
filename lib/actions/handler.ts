@@ -85,22 +85,53 @@ export function actionErrorResponse(error: unknown): Response {
   return Response.json({ message, code: "internal-error" }, { status: 500 });
 }
 
+/** The app's own public origin, used to hand a run to a fresh invocation. */
+function selfBaseUrl(): string {
+  if (process.env.ACTION_BASE_URL) return process.env.ACTION_BASE_URL.replace(/\/+$/, "");
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
+
 /**
- * Runs work after the response has been sent.
+ * Hands a run to /api/hooks/execute and returns without waiting for it.
  *
  * A workflow run takes far longer than a Hasura Action should block for, so the
- * handler returns the run id immediately and the engine keeps going in the
- * background — the client watches progress over the step_runs subscription.
- * On Vercel `waitUntil` keeps the function alive; locally it is a no-op and the
- * long-lived dev server runs the promise to completion either way.
+ * Action returns the run id immediately and progress reaches the client over the
+ * step_runs subscription. The obvious way to do that — keep executing after
+ * responding, via waitUntil — is NOT reliable on serverless: once the response
+ * is sent the instance can be frozen mid-run, and a run that was created but
+ * never executed sits at `pending` forever. That happened in production, and
+ * intermittently, which is worse than failing outright.
+ *
+ * So execution happens in its own invocation, whose entire job is that run and
+ * which therefore cannot be frozen by an unrelated response. The dispatching
+ * request is abandoned after a moment: by then the callee has the whole request
+ * and is working, and aborting only stops *us* waiting for its reply.
  */
-export function runInBackground(work: Promise<unknown>): void {
-  const guarded = work.catch((error) => {
-    console.error("[foreman] background execution failed:", error);
+export function dispatchRun(runId: string): void {
+  const work = fetch(`${selfBaseUrl()}/api/hooks/execute`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-foreman-action-secret": serverEnv.actionSecret(),
+    },
+    body: JSON.stringify({ run_id: runId }),
+    signal: AbortSignal.timeout(1500),
+  }).catch((error: unknown) => {
+    // An abort here is the expected path, not a failure.
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+      return;
+    }
+    console.error(`[foreman] could not dispatch run ${runId}:`, error);
   });
+
+  // On Vercel this keeps the instance alive long enough to flush the request.
   try {
-    waitUntil(guarded);
+    waitUntil(work);
   } catch {
-    /* not running on Vercel — the promise still settles in-process */
+    /* not on Vercel; the dev server stays alive anyway */
   }
 }

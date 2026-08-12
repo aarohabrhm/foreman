@@ -1,5 +1,4 @@
-import { actionErrorResponse, assertCallerIsHasura, runInBackground } from "@/lib/actions/handler";
-import { executeRun } from "@/lib/engine/executor";
+import { actionErrorResponse, assertCallerIsHasura, dispatchRun } from "@/lib/actions/handler";
 import { createRun, loadWorkflowForRun } from "@/lib/engine/startRun";
 import { adminGraphql } from "@/lib/nhost/admin";
 
@@ -42,7 +41,7 @@ export async function POST(request: Request): Promise<Response> {
           triggeredBy: null,
           triggerPayload: { source: "cron", every_minutes: intervalMinutes, at: new Date().toISOString() },
         });
-        runInBackground(executeRun(runId));
+        dispatchRun(runId);
         started.push(runId);
       } catch (error) {
         console.warn(

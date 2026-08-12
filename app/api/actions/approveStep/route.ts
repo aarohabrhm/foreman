@@ -2,10 +2,9 @@ import {
   ActionError,
   actionErrorResponse,
   readActionRequest,
-  runInBackground,
+  dispatchRun,
 } from "@/lib/actions/handler";
 import { assertCanApprove, loadMembership, notFound } from "@/lib/auth/layer2";
-import { executeRun } from "@/lib/engine/executor";
 import { adminGraphql } from "@/lib/nhost/admin";
 
 export const maxDuration = 60;
@@ -91,7 +90,7 @@ export async function POST(request: Request): Promise<Response> {
       { runId: stepRun.workflow_run_id },
     );
 
-    runInBackground(executeRun(stepRun.workflow_run_id));
+    dispatchRun(stepRun.workflow_run_id);
 
     return Response.json({
       run_id: stepRun.workflow_run_id,

@@ -2,10 +2,9 @@ import {
   ActionError,
   actionErrorResponse,
   readActionRequest,
-  runInBackground,
+  dispatchRun,
 } from "@/lib/actions/handler";
 import { tokensMatch } from "@/lib/actions/tokens";
-import { executeRun } from "@/lib/engine/executor";
 import { createRun, loadWorkflowForRun } from "@/lib/engine/startRun";
 import { adminGraphql } from "@/lib/nhost/admin";
 
@@ -54,7 +53,7 @@ export async function POST(request: Request): Promise<Response> {
       triggerPayload: parsePayload(input.payload_json),
     });
 
-    runInBackground(executeRun(runId));
+    dispatchRun(runId);
 
     return Response.json({ run_id: runId, status: "running" });
   } catch (error) {
