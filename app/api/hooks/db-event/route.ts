@@ -16,8 +16,14 @@ interface WatchedRecord {
  *
  * A row change in a watched table auto-starts a run, with no button click and
  * no user session: every workflow in that row's organization with an enabled
- * `database_event` trigger is started, with the row itself as the trigger
- * payload (so `{{trigger.payload...}}` resolves inside step configs).
+ * `database_event` trigger is started, with the row as the trigger payload.
+ *
+ * The row's own `payload` object is ALSO spread across the top level, so a step
+ * config written as `{{trigger.text}}` resolves the same way here as it does for
+ * a manual or webhook run. Without that, the identical workflow silently
+ * receives an empty value on this trigger alone — the prompt renders blank and
+ * the model is asked to classify nothing. `source` and `record` are applied
+ * after the spread, so a row payload cannot shadow them.
  *
  * A trigger's config may carry {"label": "..."} to respond to only some rows.
  */
@@ -47,7 +53,13 @@ export async function POST(request: Request): Promise<Response> {
           workflow,
           triggerType: "database_event",
           triggeredBy: null,
-          triggerPayload: { source: "watched_records", record: row },
+          triggerPayload: {
+            ...(row.payload && typeof row.payload === "object" && !Array.isArray(row.payload)
+              ? (row.payload as Record<string, unknown>)
+              : {}),
+            source: "watched_records",
+            record: row,
+          },
         });
         dispatchRun(runId);
         started.push(runId);
