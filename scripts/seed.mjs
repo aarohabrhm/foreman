@@ -107,7 +107,7 @@ function demoSteps() {
           "You triage inbound support requests. Reply with exactly one word: URGENT or ROUTINE.",
         prompt: "Classify this request: {{trigger.text}}",
         temperature: 0,
-        max_tokens: 16,
+        max_tokens: 256,
       },
     },
     {

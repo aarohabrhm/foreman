@@ -39,7 +39,9 @@ export const serverEnv = {
   actionSecret: () => requireServerEnv("ACTION_SECRET"),
   /** Optional: absent means llm_call steps run a disclosed stub. */
   groqApiKey: () => process.env.GROQ_API_KEY || null,
-  groqModel: () => process.env.GROQ_MODEL || "llama-3.3-70b-versatile",
+  // A reasoning model: it emits reasoning tokens before any content, so an
+  // llm_call needs a max_tokens budget that covers both. See stepTemplates.
+  groqModel: () => process.env.GROQ_MODEL || "openai/gpt-oss-20b",
   /** Optional: absent means notify steps log a disclosed stub. */
   slackWebhookUrl: () => process.env.SLACK_WEBHOOK_URL || null,
 };

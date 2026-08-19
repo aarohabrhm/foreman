@@ -47,7 +47,12 @@ export function defaultStepConfig(type: StepType): string {
       system: "You triage inbound support requests. Answer with one word: URGENT or ROUTINE.",
       prompt: "Classify this request: {{trigger.text}}",
       temperature: 0,
-      max_tokens: 32,
+      // Generous for a one-word answer, and deliberately so: the default model
+      // is a reasoning model, which spends tokens thinking BEFORE it writes any
+      // content. Too small a budget is consumed entirely by that, the response
+      // comes back with finish_reason "length" and empty content, and the step
+      // fails with "Groq returned an empty completion".
+      max_tokens: 256,
     },
     http_request: {
       method: "POST",

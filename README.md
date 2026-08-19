@@ -156,7 +156,7 @@ cp .env.example .env.local
 | `HASURA_GRAPHQL_ADMIN_SECRET` | Yes | nhost dashboard, Settings > Hasura |
 | `ACTION_SECRET` | Yes | Invent one. Any long random string. |
 | `GROQ_API_KEY` | No | [console.groq.com](https://console.groq.com) — see [API keys](#api-keys-and-what-happens-without-them) |
-| `GROQ_MODEL` | No | Defaults to `llama-3.3-70b-versatile` |
+| `GROQ_MODEL` | No | Defaults to `openai/gpt-oss-20b` |
 | `SLACK_WEBHOOK_URL` | No | A Slack incoming webhook |
 | `SEED_PASSWORD` | No | Password for the demo accounts. Defaults to `Foreman!2026`. |
 
