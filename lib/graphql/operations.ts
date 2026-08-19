@@ -36,10 +36,13 @@ export const ORG_WORKFLOWS = `
       steps(order_by: {position: asc}) {
         id
         position
+        slug
         name
         type
         config
-        branch_key
+      }
+      edges {
+        id
       }
       triggers {
         id
@@ -77,9 +80,17 @@ export const WORKFLOW_DETAIL = `
       steps(order_by: {position: asc}) {
         id
         position
+        slug
         name
         type
         config
+        ui_x
+        ui_y
+      }
+      edges {
+        id
+        from_slug
+        to_slug
         branch_key
       }
       triggers {
@@ -145,6 +156,8 @@ export const STEP_RUN_PROGRESS = `
     step_runs(where: {workflow_run_id: {_eq: $runId}}, order_by: {position: asc}) {
       id
       position
+      workflow_step_id
+      step_slug
       step_name
       step_type
       status

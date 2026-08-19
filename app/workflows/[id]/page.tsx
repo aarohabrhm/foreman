@@ -4,6 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useMemo, useState } from "react";
 
+import { Inspector } from "@/components/canvas/Inspector";
+import { WorkflowCanvas } from "@/components/canvas/WorkflowCanvas";
+import { autoLayout } from "@/components/canvas/geometry";
+import {
+  CLONE_OFFSET,
+  useGraphEditor,
+  type CanvasEdge,
+  type CanvasNode,
+} from "@/components/canvas/useGraphEditor";
 import { useSession } from "@/components/SessionProvider";
 import { Button, Card, Empty, ErrorNote, Field, StatusPill, inputClass } from "@/components/ui";
 import { graphqlUrl } from "@/lib/env";
@@ -11,23 +20,11 @@ import { SAVE_WORKFLOW, TRIGGER_WORKFLOW_RUN, WORKFLOW_DETAIL } from "@/lib/grap
 import { useGraphQLQuery } from "@/lib/hooks";
 import { userGraphql } from "@/lib/nhost/client";
 import {
-  OWNER_ONLY_STEP_TYPES,
   OWNER_ONLY_TRIGGER_TYPES,
-  STEP_HINTS,
-  STEP_LABELS,
   TRIGGER_LABELS,
-  defaultStepConfig,
   defaultTriggerConfig,
 } from "@/lib/stepTemplates";
-import { STEP_TYPES, TRIGGER_TYPES, type StepType, type TriggerType } from "@/lib/types";
-
-interface DraftStep {
-  key: string;
-  name: string;
-  type: StepType;
-  configJson: string;
-  branchKey: "" | "true" | "false";
-}
+import { TRIGGER_TYPES, type EdgeBranchKey, type StepType, type TriggerType } from "@/lib/types";
 
 interface DraftTrigger {
   enabled: boolean;
@@ -42,16 +39,17 @@ interface LoadedWorkflow {
   steps: {
     id: string;
     position: number;
+    slug: string;
     name: string;
     type: StepType;
     config: unknown;
-    branch_key: string | null;
+    ui_x: number;
+    ui_y: number;
   }[];
+  edges: { id: string; from_slug: string; to_slug: string; branch_key: EdgeBranchKey }[];
   triggers: { id: string; trigger_type: TriggerType; config: unknown; is_enabled: boolean }[];
   runs: { id: string; status: string; trigger_type: string; created_at: string }[];
 }
-
-const newKey = () => Math.random().toString(36).slice(2);
 
 export default function WorkflowBuilderPage({ params }: PageProps<"/workflows/[id]">) {
   const { id } = use(params);
@@ -67,7 +65,7 @@ export default function WorkflowBuilderPage({ params }: PageProps<"/workflows/[i
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [steps, setSteps] = useState<DraftStep[]>([]);
+  const graph = useGraphEditor();
   const [triggers, setTriggers] = useState<Record<TriggerType, DraftTrigger>>(() =>
     Object.fromEntries(
       TRIGGER_TYPES.map((type) => [
@@ -85,22 +83,43 @@ export default function WorkflowBuilderPage({ params }: PageProps<"/workflows/[i
   // Load the saved workflow into the draft exactly once per workflow. Adjusting
   // state during render (rather than in an effect) is the supported way to
   // derive state from freshly arrived data: React re-renders immediately with
-  // the new values instead of painting a blank form first. Keyed on the
+  // the new values instead of painting a blank canvas first. Keyed on the
   // workflow id, so a refetch after saving never discards unsaved edits.
   const [hydratedId, setHydratedId] = useState<string | null>(null);
   if (loaded && hydratedId !== loaded.id) {
     setHydratedId(loaded.id);
     setName(loaded.name);
     setDescription(loaded.description ?? "");
-    setSteps(
-      loaded.steps.map((step) => ({
-        key: step.id,
-        name: step.name,
-        type: step.type,
-        configJson: JSON.stringify(step.config ?? {}, null, 2),
-        branchKey: (step.branch_key as "true" | "false" | null) ?? "",
-      })),
-    );
+
+    const edges: CanvasEdge[] = loaded.edges.map((edge) => ({
+      id: edge.id,
+      from: edge.from_slug,
+      to: edge.to_slug,
+      branch: edge.branch_key ?? "",
+    }));
+
+    // A workflow last saved before the canvas existed has every coordinate at
+    // 0. Lay it out once rather than stacking every node on the origin; the
+    // positions become real as soon as it is saved again.
+    const untouched = loaded.steps.every((step) => !step.ui_x && !step.ui_y);
+    const placed = untouched
+      ? autoLayout(
+          loaded.steps,
+          loaded.edges.map((edge) => ({ from_slug: edge.from_slug, to_slug: edge.to_slug })),
+        )
+      : null;
+
+    const nodes: CanvasNode[] = loaded.steps.map((step) => ({
+      slug: step.slug,
+      name: step.name,
+      type: step.type,
+      configJson: JSON.stringify(step.config ?? {}, null, 2),
+      x: placed?.get(step.slug)?.x ?? step.ui_x,
+      y: placed?.get(step.slug)?.y ?? step.ui_y,
+    }));
+
+    graph.dispatch({ type: "hydrate", nodes, edges });
+
     setTriggers(
       Object.fromEntries(
         TRIGGER_TYPES.map((type) => {
@@ -150,35 +169,6 @@ export default function WorkflowBuilderPage({ params }: PageProps<"/workflows/[i
     );
   }
 
-  function addStep(type: StepType) {
-    setSteps((current) => [
-      ...current,
-      {
-        key: newKey(),
-        name: STEP_LABELS[type],
-        type,
-        configJson: defaultStepConfig(type),
-        branchKey: "",
-      },
-    ]);
-  }
-
-  function updateStep(key: string, patch: Partial<DraftStep>) {
-    setSteps((current) =>
-      current.map((step) => (step.key === key ? { ...step, ...patch } : step)),
-    );
-  }
-
-  function moveStep(index: number, delta: number) {
-    setSteps((current) => {
-      const target = index + delta;
-      if (target < 0 || target >= current.length) return current;
-      const next = current.slice();
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
-  }
-
   async function save() {
     if (!session.activeOrgId) return;
     setBusy(true);
@@ -186,11 +176,16 @@ export default function WorkflowBuilderPage({ params }: PageProps<"/workflows/[i
     setNotice(null);
 
     try {
-      for (const step of steps) {
+      if (graph.problems.cycle.length) {
+        throw new Error(
+          `These steps loop back on themselves and cannot run: ${graph.problems.cycle.join(", ")}`,
+        );
+      }
+      for (const node of graph.nodes) {
         try {
-          JSON.parse(step.configJson || "{}");
+          JSON.parse(node.configJson || "{}");
         } catch {
-          throw new Error(`Step "${step.name}": config is not valid JSON`);
+          throw new Error(`Step "${node.name}": config is not valid JSON`);
         }
       }
 
@@ -204,12 +199,21 @@ export default function WorkflowBuilderPage({ params }: PageProps<"/workflows/[i
             org_id: session.activeOrgId,
             name: name.trim(),
             description,
-            steps: steps.map((step, index) => ({
+            // `position` here is only the tiebreak for equally-ready steps —
+            // the Action derives the real execution order from the connections.
+            steps: graph.nodes.map((node, index) => ({
               position: index,
-              name: step.name,
-              type: step.type,
-              config_json: step.configJson || "{}",
-              branch_key: step.branchKey || null,
+              slug: node.slug,
+              name: node.name,
+              type: node.type,
+              config_json: node.configJson || "{}",
+              ui_x: node.x,
+              ui_y: node.y,
+            })),
+            edges: graph.edges.map((edge) => ({
+              from_slug: edge.from,
+              to_slug: edge.to,
+              branch_key: edge.branch,
             })),
             triggers: TRIGGER_TYPES.filter((type) => triggers[type].enabled).map((type) => ({
               trigger_type: type,
@@ -332,131 +336,67 @@ export default function WorkflowBuilderPage({ params }: PageProps<"/workflows/[i
         </div>
       </Card>
 
-      <Card>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
+      <Card className="p-0">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3">
           <h2 className="font-medium">Steps</h2>
           <span className="text-xs text-[var(--muted)]">
-            Executed top to bottom. Templates like {"{{last.text}}"} read earlier output.
+            Drag a step&rsquo;s right-hand dot onto another to connect them. Drag the background to
+            select several, space or the middle button to pan. A step runs once any connection into
+            it is live; templates like {"{{steps.classify.output.text}}"} read an earlier step by its
+            reference id.
           </span>
         </div>
 
-        <div className="space-y-3">
-          {steps.map((step, index) => (
-            <div key={step.key} className="rounded-md border border-[var(--border)] p-3">
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="w-8 pb-2 text-sm text-[var(--muted)]">{index + 1}</div>
-
-                <div className="min-w-40 flex-1">
-                  <Field label="Name">
-                    <input
-                      value={step.name}
-                      onChange={(event) => updateStep(step.key, { name: event.target.value })}
-                      disabled={!canEdit}
-                      className={inputClass}
-                    />
-                  </Field>
-                </div>
-
-                <div className="min-w-44">
-                  <Field label="Type">
-                    <select
-                      value={step.type}
-                      onChange={(event) =>
-                        updateStep(step.key, {
-                          type: event.target.value as StepType,
-                          configJson: defaultStepConfig(event.target.value as StepType),
-                        })
-                      }
-                      disabled={!canEdit}
-                      className={inputClass}
-                    >
-                      {STEP_TYPES.map((type) => (
-                        <option
-                          key={type}
-                          value={type}
-                          disabled={!isOwner && OWNER_ONLY_STEP_TYPES.includes(type)}
-                        >
-                          {STEP_LABELS[type]}
-                          {!isOwner && OWNER_ONLY_STEP_TYPES.includes(type) ? " (owner only)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
-
-                <div className="min-w-32">
-                  <Field label="Runs on branch">
-                    <select
-                      value={step.branchKey}
-                      onChange={(event) =>
-                        updateStep(step.key, {
-                          branchKey: event.target.value as DraftStep["branchKey"],
-                        })
-                      }
-                      disabled={!canEdit}
-                      className={inputClass}
-                    >
-                      <option value="">always</option>
-                      <option value="true">if true</option>
-                      <option value="false">if false</option>
-                    </select>
-                  </Field>
-                </div>
-
-                {canEdit ? (
-                  <div className="flex gap-1 pb-0.5">
-                    <Button onClick={() => moveStep(index, -1)} disabled={index === 0}>
-                      ↑
-                    </Button>
-                    <Button onClick={() => moveStep(index, 1)} disabled={index === steps.length - 1}>
-                      ↓
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() =>
-                        setSteps((current) => current.filter((entry) => entry.key !== step.key))
-                      }
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-
-              <p className="mt-2 text-xs text-[var(--muted)]">{STEP_HINTS[step.type]}</p>
-
-              <textarea
-                value={step.configJson}
-                onChange={(event) => updateStep(step.key, { configJson: event.target.value })}
-                disabled={!canEdit}
-                rows={Math.min(12, step.configJson.split("\n").length + 1)}
-                spellCheck={false}
-                className={`${inputClass} mt-2 font-mono text-xs`}
-              />
-            </div>
-          ))}
-
-          {steps.length === 0 ? <Empty>No steps yet.</Empty> : null}
-        </div>
-
-        {canEdit ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {STEP_TYPES.map((type) => (
-              <Button
-                key={type}
-                onClick={() => addStep(type)}
-                disabled={!isOwner && OWNER_ONLY_STEP_TYPES.includes(type)}
-                title={
-                  !isOwner && OWNER_ONLY_STEP_TYPES.includes(type)
-                    ? "Only an owner may add this step type"
-                    : undefined
-                }
-              >
-                + {STEP_LABELS[type]}
-              </Button>
-            ))}
+        <div className="grid h-[620px] grid-rows-[1fr_auto] lg:grid-cols-[1fr_320px] lg:grid-rows-1">
+          <div className="min-h-0 p-2">
+            <WorkflowCanvas
+              nodes={graph.nodes}
+              edges={graph.edges}
+              selected={graph.selected}
+              selectedSet={graph.selectedSet}
+              selectionFragment={graph.selectionFragment}
+              problems={graph.problems}
+              dispatch={graph.dispatch}
+              canEdit={canEdit}
+              isOwner={isOwner}
+              canUndo={graph.canUndo}
+              canRedo={graph.canRedo}
+            />
           </div>
-        ) : null}
+
+          <div className="min-h-0 border-t border-[var(--border)] lg:border-l lg:border-t-0">
+            <Inspector
+              node={graph.selectedNode}
+              canEdit={canEdit}
+              isOwner={isOwner}
+              takenSlugs={graph.nodes.map((node) => node.slug)}
+              selectedCount={graph.selected.length}
+              onChange={(patch) =>
+                graph.selectedNode
+                  ? graph.dispatch({ type: "updateNode", slug: graph.selectedNode.slug, patch })
+                  : undefined
+              }
+              onRenameSlug={(next) =>
+                graph.selectedNode
+                  ? graph.dispatch({ type: "renameSlug", slug: graph.selectedNode.slug, next })
+                  : undefined
+              }
+              onDelete={() =>
+                graph.selectedNode
+                  ? graph.dispatch({ type: "deleteNode", slug: graph.selectedNode.slug })
+                  : undefined
+              }
+              onDeleteSelection={() => graph.dispatch({ type: "deleteSelection" })}
+              onDuplicate={() =>
+                graph.dispatch({
+                  type: "insertGraph",
+                  fragment: graph.selectionFragment,
+                  offset: { x: CLONE_OFFSET, y: CLONE_OFFSET },
+                })
+              }
+            />
+          </div>
+        </div>
       </Card>
 
       <Card>

@@ -2,6 +2,7 @@
 - "!include public_org_members.yaml"
 - "!include public_workflows.yaml"
 - "!include public_workflow_steps.yaml"
+- "!include public_workflow_step_edges.yaml"
 - "!include public_workflow_triggers.yaml"
 - "!include public_workflow_runs.yaml"
 - "!include public_step_runs.yaml"

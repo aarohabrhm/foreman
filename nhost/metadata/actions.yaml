@@ -108,8 +108,15 @@ custom_types:
   input_objects:
     - name: WorkflowStepInput
       fields:
+        # The author's preferred order. Only a tiebreak now: the handler assigns
+        # the real `position` from a topological sort of the connections.
         - name: position
           type: Int!
+        # Stable per-workflow node id. Connections reference it, and it is what
+        # templates read ({{steps.classify.output.text}}). Derived from the name
+        # when omitted, so a caller that knows nothing about the graph still works.
+        - name: slug
+          type: String
         - name: name
           type: String!
         - name: type
@@ -118,6 +125,24 @@ custom_types:
         # scalar; the handlers parse it and report bad JSON as a clean error.
         - name: config_json
           type: String
+        # Canvas coordinates.
+        - name: ui_x
+          type: Float
+        - name: ui_y
+          type: Float
+        # DEPRECATED, replaced by WorkflowEdgeInput.branch_key. Still accepted so
+        # a caller that sends the old linear shape keeps working: the handler
+        # synthesises the equivalent connections. Remove once nothing sends it.
+        - name: branch_key
+          type: String
+    - name: WorkflowEdgeInput
+      fields:
+        - name: from_slug
+          type: String!
+        - name: to_slug
+          type: String!
+        # '' or null = unconditional. 'true'/'false' = only on that side of the
+        # source conditional_branch.
         - name: branch_key
           type: String
     - name: WorkflowTriggerInput
@@ -140,6 +165,10 @@ custom_types:
           type: String
         - name: steps
           type: "[WorkflowStepInput!]!"
+        # Omit, or send [], for a straight-line workflow: a step with no
+        # incoming connection is a root and always runs.
+        - name: edges
+          type: "[WorkflowEdgeInput!]"
         - name: triggers
           type: "[WorkflowTriggerInput!]!"
   objects:

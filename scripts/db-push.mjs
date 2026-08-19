@@ -7,6 +7,14 @@
  * a blind `replace_metadata` would delete them. This script therefore exports
  * the live metadata, swaps in only the objects under nhost/metadata, and writes
  * the result back.
+ *
+ * Migrations run in two phases, either side of the metadata apply. A migration
+ * that drops something the LIVE metadata still names — a column listed in a
+ * permission, say — cannot run before that metadata is replaced: Hasura's
+ * run_sql refuses it as having dependent objects (we call it with
+ * `cascade: false` deliberately, so such a drop can never silently delete a
+ * permission). Such a migration marks itself with the directive below and is
+ * applied after the metadata that stops referencing it, in the same push.
  */
 
 import { readdirSync, readFileSync, existsSync } from "node:fs";
@@ -16,6 +24,12 @@ import { metadataApi, runSql, hasuraBaseUrl } from "./lib/hasura.mjs";
 import { loadOwnedMetadata, migrationsDir, ownedTableKeys } from "./lib/metadata.mjs";
 
 const MIGRATIONS_TABLE = "public._foreman_migrations";
+
+/**
+ * A migration whose up.sql contains this directive is held back until after
+ * the metadata apply. See the file header.
+ */
+const AFTER_METADATA = "foreman:after-metadata";
 
 async function ensureMigrationsTable() {
   await runSql(`
@@ -34,29 +48,50 @@ async function appliedVersions() {
   return new Set(rows.map(([version]) => version));
 }
 
-async function applyMigrations() {
-  await ensureMigrationsTable();
-  const applied = await appliedVersions();
-
+/**
+ * Every migration folder on disk, oldest first, paired with its SQL and with
+ * the phase it belongs to.
+ */
+function readMigrations() {
   const dirs = readdirSync(migrationsDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
 
-  let count = 0;
+  const migrations = [];
   for (const dir of dirs) {
-    const [version, ...nameParts] = dir.split("_");
-    if (applied.has(version)) {
-      console.log(`  = ${dir} (already applied)`);
-      continue;
-    }
     const upPath = resolve(migrationsDir, dir, "up.sql");
     if (!existsSync(upPath)) continue;
 
-    console.log(`  + ${dir}`);
-    await runSql(readFileSync(upPath, "utf8"));
+    const [version, ...nameParts] = dir.split("_");
+    const sql = readFileSync(upPath, "utf8");
+    migrations.push({
+      dir,
+      version,
+      name: nameParts.join("_"),
+      sql,
+      afterMetadata: sql.includes(AFTER_METADATA),
+    });
+  }
+  return migrations;
+}
+
+async function applyMigrations(phase) {
+  await ensureMigrationsTable();
+  const applied = await appliedVersions();
+
+  let count = 0;
+  for (const migration of readMigrations()) {
+    if (migration.afterMetadata !== (phase === "after-metadata")) continue;
+    if (applied.has(migration.version)) {
+      console.log(`  = ${migration.dir} (already applied)`);
+      continue;
+    }
+
+    console.log(`  + ${migration.dir}`);
+    await runSql(migration.sql);
     await runSql(
-      `INSERT INTO ${MIGRATIONS_TABLE} (version, name) VALUES ('${version}', '${nameParts.join("_")}');`,
+      `INSERT INTO ${MIGRATIONS_TABLE} (version, name) VALUES ('${migration.version}', '${migration.name}');`,
     );
     count += 1;
   }
@@ -138,7 +173,7 @@ async function main() {
   console.log(`Target: ${hasuraBaseUrl()}`);
 
   console.log("\nMigrations:");
-  const applied = await applyMigrations();
+  const applied = await applyMigrations("before-metadata");
   console.log(applied ? `  ${applied} migration(s) applied.` : "  nothing to apply.");
 
   console.log("\nMetadata:");
@@ -147,6 +182,14 @@ async function main() {
     `  ${summary.tables} table(s) tracked, ${summary.kept} nhost-owned table(s) preserved, ` +
       `${summary.actions} action(s), ${summary.cronTriggers} cron trigger(s).`,
   );
+
+  // The metadata now live no longer names whatever these drop, so they can go.
+  // Run them even when `summary.pending` is non-empty: the tables and their
+  // permissions were applied either way, and only Actions and triggers are
+  // held back by a missing env var.
+  console.log("\nMigrations (after metadata):");
+  const late = await applyMigrations("after-metadata");
+  console.log(late ? `  ${late} migration(s) applied.` : "  nothing to apply.");
 
   if (summary.pending.length) {
     console.log("\nPENDING — applied, but not yet active:");

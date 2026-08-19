@@ -13,6 +13,13 @@ array_relationships:
         table:
           name: workflow_steps
           schema: public
+  - name: edges
+    using:
+      foreign_key_constraint_on:
+        column: workflow_id
+        table:
+          name: workflow_step_edges
+          schema: public
   - name: triggers
     using:
       foreign_key_constraint_on:

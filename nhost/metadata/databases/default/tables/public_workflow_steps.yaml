@@ -22,11 +22,13 @@ select_permissions:
       columns: &step_columns
         - id
         - workflow_id
+        - slug
         - position
         - name
         - type
         - config
-        - branch_key
+        - ui_x
+        - ui_y
         - created_at
         - updated_at
       filter: &step_is_owner
@@ -65,11 +67,13 @@ insert_permissions:
       check: *step_is_owner
       columns: &step_writable
         - workflow_id
+        - slug
         - position
         - name
         - type
         - config
-        - branch_key
+        - ui_x
+        - ui_y
   - role: editor
     permission:
       check:

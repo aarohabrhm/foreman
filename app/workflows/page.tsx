@@ -17,7 +17,8 @@ interface WorkflowSummary {
   name: string;
   description: string;
   updated_at: string;
-  steps: { id: string; type: StepType; name: string; position: number }[];
+  steps: { id: string; type: StepType; name: string; position: number; slug: string }[];
+  edges: { id: string }[];
   triggers: { id: string; trigger_type: TriggerType; is_enabled: boolean }[];
   runs: { id: string; status: string; trigger_type: string; created_at: string }[];
 }
@@ -91,19 +92,27 @@ export default function WorkflowsPage() {
                     <p className="mt-0.5 text-sm text-[var(--muted)]">{workflow.description}</p>
                   ) : null}
 
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                  {/* No "1. 2. 3." prefix any more: a workflow is a graph, and
+                      numbering it as a list would contradict what the canvas shows
+                      the moment it branches. */}
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {workflow.steps.map((step) => (
                       <span
                         key={step.id}
                         title={step.name}
                         className="rounded bg-black/5 px-1.5 py-0.5 text-xs dark:bg-white/10"
                       >
-                        {step.position + 1}. {STEP_LABELS[step.type] ?? step.type}
+                        {STEP_LABELS[step.type] ?? step.type}
                       </span>
                     ))}
                     {workflow.steps.length === 0 ? (
                       <span className="text-xs text-[var(--muted)]">no steps yet</span>
-                    ) : null}
+                    ) : (
+                      <span className="text-xs text-[var(--muted)]">
+                        {workflow.edges.length}{" "}
+                        {workflow.edges.length === 1 ? "connection" : "connections"}
+                      </span>
+                    )}
                   </div>
 
                   <div className="mt-1.5 flex flex-wrap gap-1.5">

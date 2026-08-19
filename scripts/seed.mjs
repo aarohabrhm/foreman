@@ -79,17 +79,29 @@ async function upsertMember(orgId, userId, role, email) {
 }
 
 /**
- * The acceptance-scenario workflow:
- *   llm_call -> conditional_branch -> http_request (urgent side only)
- *            -> approval_gate -> db_write
+ * The acceptance-scenario workflow, as a graph:
+ *
+ *                        /-- true --> page-on-call
+ *   classify --> is-urgent
+ *                        \- false --> log-routine
+ *                              |
+ *                              +--> human-approval --> record-outcome --> announce
+ *
+ * Note where the approval gate hangs: off the CONDITIONAL, not off either arm.
+ * That is what makes it run whichever way the branch went. Hanging it off both
+ * arms would work too — a step is reached when ANY incoming connection is live
+ * — but connecting it to the conditional says "always, after the decision",
+ * which is what is actually meant.
  */
 function demoSteps() {
   return [
     {
+      slug: "classify",
       position: 0,
       name: "Classify the request",
       type: "llm_call",
-      branch_key: null,
+      ui_x: 0,
+      ui_y: 0,
       config: {
         system:
           "You triage inbound support requests. Reply with exactly one word: URGENT or ROUTINE.",
@@ -99,67 +111,92 @@ function demoSteps() {
       },
     },
     {
+      slug: "is-urgent",
       position: 1,
       name: "Is it urgent?",
       type: "conditional_branch",
-      branch_key: null,
+      ui_x: 260,
+      ui_y: 0,
       config: { left: "{{last.text}}", operator: "contains", right: "URGENT" },
     },
     {
+      slug: "page-on-call",
       position: 2,
       name: "Page the on-call service",
       type: "http_request",
-      branch_key: "true",
+      ui_x: 520,
+      ui_y: -130,
       config: {
         method: "POST",
         url: "https://postman-echo.com/post",
-        body: { severity: "high", summary: "{{steps.0.output.text}}" },
+        // Addressed by slug rather than position: positions are derived from
+        // the graph now, so they move when the workflow is rewired.
+        body: { severity: "high", summary: "{{steps.classify.output.text}}" },
       },
     },
     {
+      slug: "log-routine",
       position: 3,
       name: "Log to the routine queue",
       type: "http_request",
-      branch_key: "false",
+      ui_x: 520,
+      ui_y: 130,
       config: {
         method: "POST",
         url: "https://postman-echo.com/post",
-        body: { severity: "normal", summary: "{{steps.0.output.text}}" },
+        body: { severity: "normal", summary: "{{steps.classify.output.text}}" },
       },
     },
     {
+      slug: "human-approval",
       position: 4,
       name: "Human approval",
       type: "approval_gate",
-      branch_key: null,
+      ui_x: 780,
+      ui_y: 0,
       config: {
         instructions: "Confirm the triage decision before it is recorded.",
         approver_roles: ["owner", "editor"],
       },
     },
     {
+      slug: "record-outcome",
       position: 5,
       name: "Record the outcome",
       type: "db_write",
-      branch_key: null,
+      ui_x: 1040,
+      ui_y: 0,
       config: {
         label: "triage-outcome",
         payload: {
-          classification: "{{steps.0.output.text}}",
-          urgent: "{{steps.1.output.result}}",
+          classification: "{{steps.classify.output.text}}",
+          urgent: "{{steps.is-urgent.output.result}}",
         },
       },
     },
     {
+      slug: "announce",
       position: 6,
       name: "Announce the outcome",
       type: "notify",
-      branch_key: null,
+      ui_x: 1300,
+      ui_y: 0,
       config: {
         channel: "slack",
-        message: "Triage complete: {{steps.0.output.text}}",
+        message: "Triage complete: {{steps.classify.output.text}}",
       },
     },
+  ];
+}
+
+function demoEdges() {
+  return [
+    { from_slug: "classify", to_slug: "is-urgent", branch_key: "" },
+    { from_slug: "is-urgent", to_slug: "page-on-call", branch_key: "true" },
+    { from_slug: "is-urgent", to_slug: "log-routine", branch_key: "false" },
+    { from_slug: "is-urgent", to_slug: "human-approval", branch_key: "" },
+    { from_slug: "human-approval", to_slug: "record-outcome", branch_key: "" },
+    { from_slug: "record-outcome", to_slug: "announce", branch_key: "" },
   ];
 }
 
@@ -190,25 +227,49 @@ async function upsertWorkflow(orgId, name, createdBy) {
     ).insert_workflows_one.id;
 
   const steps = demoSteps();
+  const edges = demoEdges();
+
+  // Same order as the saveWorkflow Action, and for the same reasons: the
+  // connections go first so a step can be deleted without tripping the foreign
+  // keys pointing at its slug, and the removals go before the upsert because
+  // (workflow_id, position) is only deferred within a single mutation.
+  await adminGraphql(
+    `mutation ClearEdges($workflowId: uuid!) {
+       delete_workflow_step_edges(where: {workflow_id: {_eq: $workflowId}}) { affected_rows }
+     }`,
+    { workflowId },
+  );
+  await adminGraphql(
+    `mutation DropRemovedSteps($workflowId: uuid!, $keep: [String!]!) {
+       delete_workflow_steps(where: {workflow_id: {_eq: $workflowId}, slug: {_nin: $keep}}) {
+         affected_rows
+       }
+     }`,
+    { workflowId, keep: steps.map((step) => step.slug) },
+  );
+  // Upserts on slug, not position: position is derived from the graph and moves
+  // when the workflow is rewired, and its unique constraint is deferrable — so
+  // Postgres would refuse it as an ON CONFLICT arbiter.
   await adminGraphql(
     `mutation UpsertSteps($objects: [workflow_steps_insert_input!]!) {
        insert_workflow_steps(
          objects: $objects,
          on_conflict: {
-           constraint: workflow_steps_workflow_id_position_key,
-           update_columns: [name, type, config, branch_key]
+           constraint: workflow_steps_workflow_id_slug_key,
+           update_columns: [name, type, config, position, ui_x, ui_y]
          }
        ) { affected_rows }
      }`,
     { objects: steps.map((step) => ({ ...step, workflow_id: workflowId })) },
   );
   await adminGraphql(
-    `mutation DropTail($workflowId: uuid!, $keep: Int!) {
-       delete_workflow_steps(where: {workflow_id: {_eq: $workflowId}, position: {_gte: $keep}}) {
-         affected_rows
-       }
+    `mutation InsertEdges($objects: [workflow_step_edges_insert_input!]!) {
+       insert_workflow_step_edges(
+         objects: $objects,
+         on_conflict: {constraint: workflow_step_edges_unique_edge, update_columns: []}
+       ) { affected_rows }
      }`,
-    { workflowId, keep: steps.length },
+    { objects: edges.map((edge) => ({ ...edge, workflow_id: workflowId })) },
   );
 
   return workflowId;

@@ -1,0 +1,95 @@
+table:
+  name: workflow_step_edges
+  schema: public
+object_relationships:
+  - name: workflow
+    using:
+      # workflow_step_edges has three foreign keys that all mention workflow_id,
+      # but the other two are on different column SETS — (workflow_id, from_slug)
+      # and (workflow_id, to_slug) — so this still resolves unambiguously to the
+      # single-column key on workflows.
+      foreign_key_constraint_on: workflow_id
+
+# --- Layer 1 ---------------------------------------------------------------
+# The same two hops as workflow_steps: workflow -> org -> members.
+#
+# Unlike workflow_steps there is no step-type clause here, and none is needed:
+# an edge carries no step type, and because workflow_id is part of BOTH
+# composite foreign keys, a connection structurally cannot reach a step in
+# another workflow — and therefore not another org's step. Cross-org isolation
+# on this table is a property of the schema, not a rule that could be written
+# wrongly. See the migration 1786453200000_workflow_graph.
+select_permissions:
+  - role: owner
+    permission:
+      columns: &edge_columns
+        - id
+        - workflow_id
+        - from_slug
+        - to_slug
+        - branch_key
+        - created_at
+      filter: &edge_is_owner
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: owner
+  - role: editor
+    permission:
+      columns: *edge_columns
+      filter: &edge_is_editor
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: editor
+  - role: viewer
+    permission:
+      columns: *edge_columns
+      filter:
+        workflow:
+          org:
+            members:
+              user_id:
+                _eq: X-Hasura-User-Id
+              role:
+                _eq: viewer
+insert_permissions:
+  - role: owner
+    permission:
+      check: *edge_is_owner
+      columns: &edge_writable
+        - workflow_id
+        - from_slug
+        - to_slug
+        - branch_key
+  - role: editor
+    permission:
+      check: *edge_is_editor
+      columns: *edge_writable
+update_permissions:
+  - role: owner
+    permission:
+      columns: *edge_writable
+      filter: *edge_is_owner
+      check: *edge_is_owner
+  - role: editor
+    permission:
+      columns: *edge_writable
+      filter: *edge_is_editor
+      check: *edge_is_editor
+# Delete is granted to editor here, mirroring workflow_steps rather than
+# workflows: an editor who may rewire a graph has to be able to remove a
+# connection, or every edit would be additive only.
+delete_permissions:
+  - role: owner
+    permission:
+      filter: *edge_is_owner
+  - role: editor
+    permission:
+      filter: *edge_is_editor

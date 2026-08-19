@@ -12,8 +12,9 @@ export interface ConditionalBranchConfig {
  * if/else on the previous step's output.
  *
  * Comparison is data-driven — no expression evaluation — and the result is
- * recorded as the run's current branch. Steps tagged `branch_key: 'true'` or
- * `'false'` then run or are marked `skipped` accordingly.
+ * recorded against THIS step in the run context. The connections leaving this
+ * step carry a `true`/`false` label; the engine follows only the ones that
+ * match, and records everything left unreachable as `skipped`.
  */
 export async function executeConditionalBranch(
   config: ConditionalBranchConfig,

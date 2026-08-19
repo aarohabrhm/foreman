@@ -32,10 +32,30 @@ type Mutation {
 }
 
 input WorkflowStepInput {
+  """The author's preferred order. Only a tiebreak: the handler assigns the real
+  position from a topological sort of the connections."""
   position: Int!
+  """Stable per-workflow node id. Connections reference it, and it is what
+  templates read ({{steps.classify.output.text}}). Derived from the name when
+  omitted, so a caller that knows nothing about the graph still works."""
+  slug: String
   name: String!
   type: String!
   config_json: String
+  """Canvas coordinates."""
+  ui_x: Float
+  ui_y: Float
+  """DEPRECATED, replaced by WorkflowEdgeInput.branch_key. Still accepted so a
+  caller sending the old linear shape keeps working: the handler synthesises the
+  equivalent connections."""
+  branch_key: String
+}
+
+input WorkflowEdgeInput {
+  from_slug: String!
+  to_slug: String!
+  """'' or null = unconditional. 'true'/'false' = only on that side of the
+  source conditional_branch."""
   branch_key: String
 }
 
@@ -51,6 +71,9 @@ input SaveWorkflowInput {
   name: String!
   description: String
   steps: [WorkflowStepInput!]!
+  """Omit, or send [], for a straight-line workflow: a step with no incoming
+  connection is a root and always runs."""
+  edges: [WorkflowEdgeInput!]
   triggers: [WorkflowTriggerInput!]!
 }
 

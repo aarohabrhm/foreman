@@ -1,0 +1,21 @@
+-- foreman:after-metadata
+--
+-- workflow_steps.branch_key is superseded by workflow_step_edges.branch_key:
+-- the conditional label belongs on the connection leaving the conditional, not
+-- on the destination step.
+--
+-- The directive on the first line holds this migration back until after the
+-- metadata apply, and it is load-bearing. scripts/lib/hasura.mjs calls run_sql
+-- with `cascade: false`, so while the LIVE metadata still names branch_key in
+-- the workflow_steps permission column lists, Postgres — via Hasura's
+-- dependency check — refuses the drop as having dependent objects. Run in the
+-- ordinary phase it would abort the push before any metadata was applied, and
+-- every later push would abort at exactly the same point: the metadata that
+-- stops referencing the column could never get out.
+--
+-- Deferring it to after applyMetadata() puts the drop on the far side of that
+-- change, so a single `npm run db:push` carries the whole thing.
+--
+-- `cascade: false` stays as it is on purpose: a drop must never be able to
+-- silently delete a permission. Making the ordering explicit here is the point.
+ALTER TABLE public.workflow_steps DROP COLUMN IF EXISTS branch_key;

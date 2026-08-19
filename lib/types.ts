@@ -38,16 +38,37 @@ export interface OrgMembership {
 export interface WorkflowStep {
   id: string;
   workflow_id: string;
+  /** Stable per-workflow node id. What connections and templates refer to. */
+  slug: string;
+  /** Execution order — the graph's topological index, assigned by saveWorkflow. */
   position: number;
   name: string;
   type: StepType;
   config: Record<string, unknown>;
+  /** Canvas coordinates. */
+  ui_x: number;
+  ui_y: number;
+}
+
+/** '' is an ordinary connection; 'true'/'false' leave a conditional_branch. */
+export const EDGE_BRANCH_KEYS = ["", "true", "false"] as const;
+export type EdgeBranchKey = (typeof EDGE_BRANCH_KEYS)[number];
+
+export interface WorkflowStepEdge {
+  id: string;
+  workflow_id: string;
+  from_slug: string;
+  to_slug: string;
+  branch_key: EdgeBranchKey;
 }
 
 export interface StepRun {
   id: string;
   workflow_run_id: string;
-  workflow_step_id: string;
+  workflow_step_id: string | null;
+  position: number;
+  /** Snapshot of the step's slug — survives the step being deleted or rewired. */
+  step_slug: string;
   status: StepRunStatus;
   input: unknown;
   output: unknown;

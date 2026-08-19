@@ -23,6 +23,7 @@ select_permissions:
         - workflow_run_id
         - workflow_step_id
         - position
+        - step_slug
         - step_name
         - step_type
         - status
