@@ -15,7 +15,7 @@ object_relationships:
 # (assertCanCreateStepType), which the saveWorkflow Action calls before writing.
 # The clause is here because these tables also accept direct GraphQL mutations,
 # and a hole an editor could reach by hand-writing a mutation would be a real
-# one. See docs/WRITEUP.md.
+# one. See docs/ARCHITECTURE.md.
 select_permissions:
   - role: owner
     permission:

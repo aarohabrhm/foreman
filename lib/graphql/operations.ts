@@ -1,7 +1,5 @@
 /**
  * Every GraphQL operation the frontend uses, in one place.
- *
- * The four operations the brief calls for are marked REQUIRED below.
  */
 
 /** Bootstrap, run as nhost's default `user` role: which orgs am I in, and as what? */
@@ -23,8 +21,8 @@ export const MY_MEMBERSHIPS = `
 `;
 
 /**
- * REQUIRED #1 — an org's workflows with their steps, triggers and most recent
- * run status, plus the usage aggregate for the quota indicator.
+ * An org's workflows with their steps, triggers and most recent run status,
+ * plus the usage aggregate for the quota indicator.
  */
 export const ORG_WORKFLOWS = `
   query OrgWorkflows($orgId: uuid!) {
@@ -111,7 +109,7 @@ export const WORKFLOW_DETAIL = `
 `;
 
 /**
- * REQUIRED #2 — create/edit a workflow, its steps and its triggers.
+ * Create or edit a workflow, its steps, its connections and its triggers.
  *
  * A Hasura Action rather than a plain mutation: the Layer 2 step-type and
  * trigger-type restrictions have to see the whole submission before anything is
@@ -136,7 +134,7 @@ export const TRIGGER_WORKFLOW_RUN = `
   }
 `;
 
-/** REQUIRED #3 — approve a paused approval_gate step and resume the run. */
+/** Approve a paused approval_gate step and resume the run. */
 export const APPROVE_STEP = `
   mutation ApproveStep($stepRunId: String!, $note: String) {
     approveStep(step_run_id: $stepRunId, note: $note) {
@@ -148,7 +146,7 @@ export const APPROVE_STEP = `
 `;
 
 /**
- * REQUIRED #4 — live, step-by-step progress for one run, including the
+ * Live, step-by-step progress for one run, including the
  * "paused, awaiting approval" state (status = awaiting_approval).
  */
 export const STEP_RUN_PROGRESS = `
