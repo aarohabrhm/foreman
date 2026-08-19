@@ -1,7 +1,7 @@
 /**
  * Cross-organization isolation test, run against real accounts.
  *
- *   npm run test:cross-org
+ *   npm run test:isolation
  *
  * Signs in as a genuine Org B user and attacks Org A by ID: reading, listing,
  * subscribing, triggering, approving and writing. Inspecting the permission
@@ -15,10 +15,10 @@ import { fileURLToPath } from "node:url";
 
 import { createClient } from "graphql-ws";
 
-import { signIn, userGraphql } from "./lib/auth.mjs";
-import { adminGraphql, metadataApi } from "./lib/hasura.mjs";
+import { signIn, userGraphql } from "../../scripts/lib/auth.mjs";
+import { adminGraphql, metadataApi } from "../../scripts/lib/hasura.mjs";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 const results = [];
 
@@ -32,7 +32,7 @@ const results = [];
  *      or is deployed wrongly), so the mutation fails on the webhook call.
  *
  * Either way the caller was refused for the wrong reason, so it is reported as
- * inconclusive. scripts/verify-acceptance.mjs covers the same denials meanwhile
+ * inconclusive. tests/e2e/run-lifecycle.mjs covers the same denials meanwhile
  * by calling the handlers directly.
  *
  * Note that a *missing field* is not automatically a gap: once the Actions are

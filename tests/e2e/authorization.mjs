@@ -1,7 +1,7 @@
 /**
  * Layer 2, proven through the real Action.
  *
- *   npm run verify:layer2
+ *   npm run test:authz
  *
  * The step-type and trigger-type restrictions live in lib/auth/layer2.ts and are
  * applied by the saveWorkflow handler. This drives that handler through Hasura
@@ -15,10 +15,10 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { signIn, userGraphql } from "./lib/auth.mjs";
-import { adminGraphql } from "./lib/hasura.mjs";
+import { signIn, userGraphql } from "../../scripts/lib/auth.mjs";
+import { adminGraphql } from "../../scripts/lib/hasura.mjs";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const seed = JSON.parse(readFileSync(resolve(repoRoot, ".foreman-seed.json"), "utf8"));
 
 const checks = [];
@@ -58,7 +58,7 @@ async function main() {
 
   const base = {
     org_id: seed.orgA.id,
-    description: "created by verify:layer2",
+    description: "created by the authorization e2e test",
     triggers: [{ trigger_type: "manual", config_json: "{}", is_enabled: true }],
   };
 

@@ -1,8 +1,8 @@
 /**
- * Runs the acceptance scenario end to end and asserts what happened.
+ * Drives one workflow run through its whole lifecycle and asserts what happened.
  *
  *   npm run dev            # in another terminal
- *   npm run verify:acceptance
+ *   npm run test:e2e
  *
  * The Action handlers are ordinary HTTP endpoints, so this posts exactly the
  * payload Hasura posts (shared secret header + session_variables derived from a
@@ -20,10 +20,10 @@ import { fileURLToPath } from "node:url";
 
 import { createClient } from "graphql-ws";
 
-import { signIn } from "./lib/auth.mjs";
-import { adminGraphql } from "./lib/hasura.mjs";
+import { signIn } from "../../scripts/lib/auth.mjs";
+import { adminGraphql } from "../../scripts/lib/hasura.mjs";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const base = process.env.FOREMAN_LOCAL_BASE || "http://localhost:3000";
 const seed = JSON.parse(readFileSync(resolve(repoRoot, ".foreman-seed.json"), "utf8"));
 

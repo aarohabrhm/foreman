@@ -2,9 +2,9 @@
  * Verifies the three non-manual triggers and the notify delivery hook.
  *
  *   npm run dev            # in another terminal
- *   npm run verify:triggers
+ *   npm run test:triggers
  *
- * Like verify-acceptance, this posts the exact payloads Hasura posts — the
+ * Like run-lifecycle, this posts the exact payloads Hasura posts — the
  * webhook Action's input, an Event Trigger's `event.data.new` envelope, and the
  * cron trigger's tick — so the handler logic is proven independently of whether
  * ACTION_BASE_URL has been configured yet. What it does NOT prove is Hasura
@@ -16,9 +16,9 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { adminGraphql } from "./lib/hasura.mjs";
+import { adminGraphql } from "../../scripts/lib/hasura.mjs";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const base = process.env.FOREMAN_LOCAL_BASE || "http://localhost:3000";
 const seed = JSON.parse(readFileSync(resolve(repoRoot, ".foreman-seed.json"), "utf8"));
 

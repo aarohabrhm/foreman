@@ -4,7 +4,7 @@
  *   browser -> Hasura GraphQL -> Action -> deployed handler -> engine -> Postgres
  *                                                                   -> subscription
  *
- *   npm run verify:live
+ *   npm run test:deployed
  *
  * Every other suite drives the handlers directly. This one touches nothing but
  * the public GraphQL endpoint and the database, so it exercises the one link
@@ -15,10 +15,10 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { signIn, userGraphql } from "./lib/auth.mjs";
-import { adminGraphql } from "./lib/hasura.mjs";
+import { signIn, userGraphql } from "../../scripts/lib/auth.mjs";
+import { adminGraphql } from "../../scripts/lib/hasura.mjs";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const seed = JSON.parse(readFileSync(resolve(repoRoot, ".foreman-seed.json"), "utf8"));
 
 const checks = [];

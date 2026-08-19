@@ -2,6 +2,32 @@
   "name": "foreman",
   "version": "0.1.0",
   "private": true,
+  "description": "Self-hostable workflow automation for AI agents: build multi-step workflows on a canvas, trigger them four ways, and pause mid-run for human approval.",
+  "license": "MIT",
+  "author": "Aaroh",
+  "homepage": "https://github.com/aarohabrhm/foreman#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aarohabrhm/foreman.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aarohabrhm/foreman/issues"
+  },
+  "keywords": [
+    "workflow-automation",
+    "workflow-engine",
+    "ai-agents",
+    "llm",
+    "nextjs",
+    "hasura",
+    "graphql",
+    "postgresql",
+    "multi-tenant",
+    "self-hosted"
+  ],
+  "engines": {
+    "node": ">=22.14"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -12,11 +38,11 @@
     "check:permissions": "node scripts/check-permissions.mjs",
     "db:push": "node --env-file=.env.local scripts/db-push.mjs",
     "db:seed": "node --env-file=.env.local scripts/seed.mjs",
-    "test:cross-org": "node --env-file=.env.local scripts/test-cross-org.mjs",
-    "verify:acceptance": "node --env-file=.env.local scripts/verify-acceptance.mjs",
-    "verify:triggers": "node --env-file=.env.local scripts/verify-triggers.mjs",
-    "verify:live": "node --env-file=.env.local scripts/verify-live.mjs",
-    "verify:layer2": "node --env-file=.env.local scripts/verify-layer2.mjs"
+    "test:e2e": "node --env-file=.env.local tests/e2e/run-lifecycle.mjs",
+    "test:triggers": "node --env-file=.env.local tests/e2e/triggers.mjs",
+    "test:authz": "node --env-file=.env.local tests/e2e/authorization.mjs",
+    "test:isolation": "node --env-file=.env.local tests/e2e/tenant-isolation.mjs",
+    "test:deployed": "node --env-file=.env.local tests/e2e/deployed.mjs"
   },
   "dependencies": {
     "@nhost/nhost-js": "^4.8.0",
