@@ -234,7 +234,7 @@ function normaliseEdges(edges: EdgeInput[], steps: NormalisedStep[]): GraphEdge[
 
     // Not silently de-duplicated: a repeat also double-counts the destination's
     // indegree, which would leave it stuck in the topological sort.
-    const key = `${from} ${to} ${branchKey}`;
+    const key = `${from}\u0000${to}\u0000${branchKey}`;
     if (seen.has(key)) {
       throw new ActionError(
         `Duplicate connection from "${nameBySlug.get(from)}" to "${nameBySlug.get(to)}"`,
@@ -283,7 +283,7 @@ function deriveLegacyEdges(raw: StepInput[], steps: NormalisedStep[]): EdgeInput
       if (previousAlways) edges.push({ from_slug: previousAlways, to_slug: step.slug });
       previousAlways = step.slug;
     } else {
-      const arm = `${conditional ?? ""} ${branchKey}`;
+      const arm = `${conditional ?? ""}\u0000${branchKey}`;
       const tail = armTail.get(arm);
       if (tail) {
         edges.push({ from_slug: tail, to_slug: step.slug });
